@@ -20,6 +20,9 @@ load("data/intermediate/rolling_cohort.RData")
 # how many individuals?
 n_indiv <- length(unique(dt[,qid]))
 
+# how many rows of data?
+nrow(dt)
+
 # How many person-years?
 # number of rows + (2 * number of people)
 # This is because each person contributes two years (years 1 and 3) that aren't 
@@ -39,7 +42,9 @@ dt |>
   scale_y_continuous(labels = label_comma()) +
   theme_bw()
 
-# in which years are the most individuals contributing?
+
+
+# in which years are individuals contributing?
 dt |>
   ggplot(aes(year)) +
   geom_bar(col = "white", fill = "skyblue2") +
@@ -57,6 +62,12 @@ dt |>
 
 # what % of individuals died in their last year of followup?
 nrow(dt[(year == last_year_ffs - 1) & (dead_lead == 1)]) / length(unique(dt[,qid]))
+
+# what % of rows have outcome = 1 (death)?
+mean(dt[,dead_lead]) # 5.4%
+# by region?
+dt[, .(mean = mean(dead_lead)), by = census_div]
+
 
 # # get % exposed to 12 by region
 # expo_12_region <- dt[, .(exposed_12 = mean(pm25_binary)), by = .(census_region)]
@@ -135,8 +146,7 @@ dt |>
 #   theme(strip.background = element_rect(fill = "white"))
 
 # plot years of death (filter to year of death so no repeated indivs)
-dt |>
-  filter(dead_lead == 1) |>
+dt[dead_lead == 1,] |>
   ggplot(aes(death_year)) +
   geom_bar(col = "white", fill = "skyblue2") +
   labs(x = "Year of death",
@@ -145,8 +155,7 @@ dt |>
   theme_light()
 
 # plot age of death in this cohort (each indiv can only die once so this works)
-dt |>
-  filter(dead_lead == 1) |>
+dt[dead_lead == 1,] |>
   ggplot() +
   geom_bar(aes(age + 1),
            col = "white", fill = "skyblue2") +
@@ -156,12 +165,11 @@ dt |>
   theme_light()
 
 # death in which year of follow-up?
-dt |>
-  filter(dead_lead == 1) |>
+dt[dead_lead == 1,] |>
   ggplot() +
   geom_bar(aes(year_follow),
            col = "white", fill = "skyblue2") +
-  labs(x = "Year of follow-up",
+  labs(x = "Year of follow-up at death",
        y = "Number of individuals") +
   scale_y_continuous(labels = label_comma()) +
   theme_light()
@@ -184,6 +192,9 @@ age_dist |>
        y = "Mean age") +
   ylim(c(0, 105)) + 
   theme_light()
+
+# mean number of rolling windows individuals appear in per year
+dt[, .(mean_n_windows = mean(n_windows)), by = year]
 
 # it's weird to plot age where I count some individuals more times than others
 # # plot age by race
