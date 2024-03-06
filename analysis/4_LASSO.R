@@ -10,53 +10,63 @@ library(fst)
 library(ggplot2)
 library(tidyverse)
 
-load("data/intermediate/rolling_cohort_1000.RData")
-
-
-# change _ever columns so they are either TRUE or FALSE (see script 3)
-conditions <- c("hypert_ever", "ischmcht_ever", "diabetes_ever", "chrnkidn_ever")
-dt[, (conditions) := lapply(.SD, function(x) !is.na(x)), .SDcols = (conditions)]
-
-#---------- Race indicator variables
-
-race_indicators <- dcast(dt, qid ~ race, fun.aggregate = length)
-
-# Change race indicator column names
-setnames(race_indicators,
-         old = colnames(race_indicators)[2:7],
-         new = c("white", "black", "other", "asian", "hispanic", "native"))
-
-# Bind indicators to original data.table
-dt <- merge(dt, race_indicators, by = "qid")
-rm(race_indicators); gc()
-
-
-#---------- Sex indicator variables
-
-# should I do sex and dual? or this is the same as binary?
-
-# sex_indicators <- dcast(dt, qid ~ sex, fun.aggregate = length)
+# # Work with a smaller random sample for now
+load("data/intermediate/rolling_cohort.RData")
+# set.seed(17)
+# keep_idx <- sample(unique(dt[,qid]), 100000, replace = FALSE)
+# dt <- dt[qid %in% keep_idx,]
+# save(dt, file = "data/intermediate/rolling_cohort_100000.RData")
 # 
-# # Change race indicator column names
-# setnames(sex_indicators,
-#          old = colnames(sex_indicators)[2:3],
-#          new = c("male", "female"))
-# 
-# # Bind indicators to original data.table
-# dt <- merge(dt, sex_indicators, by = "qid")
-# rm(sex_indicators); gc()
-
-# make sex binary
-dt[,sex := sex - 1]
+# load("data/intermediate/rolling_cohort_100000.RData")
 
 
-#---------- Age indicator variables
+#----- fix race indicators (eventually do this in script 1)
 
-age_grp_indicators <- dcast(dt, qid ~ age_grp, fun.aggregate = length)
+# just make anything other than 0 a 1
+dt[, white := ifelse(white == 0, white, 1)]
+dt[, black := ifelse(black == 0, black, 1)]
+dt[, hispanic := ifelse(hispanic == 0, hispanic, 1)]
+dt[, asian := ifelse(asian == 0, asian, 1)]
+dt[, native := ifelse(native == 0, native, 1)]
+dt[, other := ifelse(other == 0, other, 1)]
 
-# Bind indicators to original data.table
-dt <- merge(dt, age_grp_indicators, by = "qid")
-rm(age_grp_indicators); gc()
+
+#-----
+
+dt[, race := factor(race)]
+
+# # make year and follow-up year factors
+dt[, year := factor(year)]
+dt[, year_follow := factor(year_follow)]
+
+# Create a list of dummy columns using lapply
+dummy_cols1 <- lapply(levels(dt$year), function(level) as.integer(dt$year == level))
+names(dummy_cols1) <- levels(dt$year)
+
+dummy_cols2 <- lapply(levels(dt$year_follow), function(level) as.integer(dt$year_follow == level))
+names(dummy_cols2) <- paste0("follow_", levels(dt$year_follow))
+
+# Bind the dummy columns to the original data.table
+dt <- cbind(dt, as.data.table(dummy_cols1))
+dt <- cbind(dt, as.data.table(dummy_cols2))
+rm(dummy_cols1, dummy_cols2)
+
+
+# make columns for interactions
+
+# function to make new columns for interactions
+new_interact_col <- function(dt, col_name_vector){
+  for (i in 1:length(col_name_vector)) {
+    dt[, (paste0("pm25_", col_name_vector[i])) := pm25 * get(col_name_vector[i])]
+  }
+  return(dt)
+}
+
+interact_cols <- c("age", "sex", "dual", "black", "other", "asian", "native", "hispanic"#,
+                   #"hypert_ever", "ischmcht_ever", "diabetes_ever", "chrnkidn_ever"
+                   )
+
+dt <- new_interact_col(dt, interact_cols)
 
 
 
@@ -65,46 +75,119 @@ rm(age_grp_indicators); gc()
 ## Group LASSO
 # requires all vars in a group (e.g., race, age) to be selected together
 
-library(gglasso)
+#library(gglasso)
 
 # X is covariate matrix
 X <- dt[, c(
   
+  # exposure
+  "pm25",
+  
   # Sex, age, dual eligibility, RTI race code
   "sex",
-  "(64,74]", "(74,84]", "(84,Inf]",
+  "age",
   "dual", 
-  "white", "black", "other", "asian", "native", "hispanic",  
+  #"white", 
+  "black", "other", "asian", "native", "hispanic",  
   
-  # # area-level potential confounders
-  # "poverty", "popdensity", "medianhousevalue", "medhouseholdincome",
-  # "pct_owner_occ", "education", "smoke_rate", "mean_bmi",
-  # "pct_blk", "pct_hispanic",
-  # "summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax",
+  # # some prevalent chronic conditions
+  "hypert_ever", "ischmcht_ever", "diabetes_ever", "chrnkidn_ever",
   
-  # some prevalent chronic conditions
-  "hypert_ever", "ischmcht_ever", "diabetes_ever", "chrnkidn_ever"
+  # year and follow-up year
+  as.character(seq(2001, 2015)),
+  paste0("follow_", 1:15),
   
-)] |> as.matrix()
+  # area-level potential confounders
+  "poverty", "popdensity", "medianhousevalue", "medhouseholdincome",
+  "pct_owner_occ", "education", "smoke_rate", "mean_bmi",
+  "pct_blk", "pct_hispanic",
+  "summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax",
+  
+  # interactions
+  paste0("pm25_", interact_cols)
+  
+), with = FALSE] |> as.matrix()
+
+
+
+# use model.matrix to set up dummy cols for year and year_follow
+# X <- model.matrix(~., X)[,-1]
+
 
 # y is outcome
-y <- ifelse(dt[,dead_lead], 1, 0)
+y <- dt[,dead_lead]
+#y_group <- ifelse(y == 0, -1, y)
 
-# var_group tells us the grouping of the variables (which ones must be selected together)
-colnames(X)
-var_group <- c(1, 2, 2, 2, 3, 
-               4, 4, 4, 4, 4, 4,
-               5, 5, 5, 5)
+# # var_group tells us the grouping of the variables (which ones must be selected together)
+# colnames(X)
+# var_group <- c(1, 
+#                2, 2, 
+#                3, 
+#                4, 4, 4, 4, 4,
+#                rep(5, 14),
+#                rep(6, 14),
+#                #rep(7, 14),
+#                seq(7, 7 + 13))
+# length(var_group) == ncol(X)
 
-# group lasso
-group_lasso <- gglasso(X, y, lambda = 0.2,
-              group = var_group, 
-              loss="ls",
-              intercept = F)
+# # group lasso
+# group_lasso <- gglasso(X,
+#                        y_group,
+#                        lambda = 0.1,
+#                        group = var_group,
+#                        loss = "logit",
+#                        intercept = F)
+# save(group_lasso, file = "results/group_lasso_1000.RData")
+# load("results/group_lasso_1000.RData")
+# 
+# # results
+# summary(group_lasso)
+# group_lasso$beta
 
-# results
-summary(group_lasso)
-group_lasso$beta
 
+########
+
+## LASSO (not group)
+
+# already standardized
+
+library(glmnet)
+
+# cross-validation to get best lambda
+set.seed(17)
+lasso_cv <- cv.glmnet(X, y, alpha = 1, family = "binomial")
+plot(lasso_cv)
+best_lambda <- lasso_cv$lambda.min
+lasso <- glmnet(X, y, 
+                family = "binomial", alpha = 1, standardize = TRUE,
+                lambda = best_lambda)
+
+
+# or test many lambdas
+# note: these test lambdas are in decreasing order! 
+# these values correspond to x-axis values but in flipped order
+# test_lambdas <- 10^seq(-4, -1.5, length = 100)
+# lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = test_lambdas)
+# plot(lasso, xvar = "lambda", label = T)
+# 
+# lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = 0.003)
+
+
+#save(lasso, file = "results/lasso_100000.RData")
+save(lasso, file = "results/lasso_all.RData")
+
+# load("results/lasso_1000.RData")
+
+
+# now try again, shrinking more:
+lasso <- glmnet(X, y, 
+                family = "binomial", alpha = 1, standardize = TRUE,
+                lambda = 0.002)
+
+save(lasso, file = "results/lasso_all_lambda_0.002.RData")
+
+# lasso results
+coefs <- coef(lasso)
+coefs
 
 
