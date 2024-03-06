@@ -7,8 +7,6 @@
 
 library(data.table)
 library(fst)
-library(ggplot2)
-library(tidyverse)
 
 # # Load data
 load("data/intermediate/rolling_cohort.RData")
@@ -20,7 +18,6 @@ load("data/intermediate/rolling_cohort.RData")
 # save(dt, file = "data/intermediate/rolling_cohort_1000.RData")
 
 # load("data/intermediate/rolling_cohort_1000.RData")
-
 
 
 #########################
@@ -35,6 +32,9 @@ outcome_fit <- glm(dead_lead ~
                      # calendar year and year of follow-up
                      as.factor(year) + as.factor(year_follow) + 
                      
+                     # census division
+                     as.factor(census_div) + 
+                     
                      # sex, age, race, Medicaid eligibility
                      sex + age + as.factor(race) + dual +
                      
@@ -45,12 +45,14 @@ outcome_fit <- glm(dead_lead ~
                      
                      # some one-way interactions
                      pm25:age + 
-                     pm25:dual, 
+                     pm25:dual +
+                     pm25:hypert_ever, 
                    
                    family = binomial(), 
                    data = dt)
+
 #save(outcome_fit, file = "results/outcome_model.RData")
-#load("results/outcome_model.RData")
+load("results/outcome_model.RData")
 
 summary(outcome_fit)
 
