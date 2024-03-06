@@ -69,38 +69,38 @@ library(tidyr)
 
 # Setup ---------------------
 
-# options(stringsAsFactors = FALSE)
-# 
-# # Read denominator files ---------------------
-# # /n/dominici_nsaph_l3/Lab/projects/analytic/
-# f <- list.files("data/raw/denom_by_year/", pattern = "\\.fst", full.names = TRUE)
-# vars <- c("qid", "year", "hmo_mo", "zip", "age", "race", "sex", "dual", "dead", "statecode",
-#           # "poverty", "popdensity", "medianhousevalue", "pct_blk", "medhouseholdincome",
-#           # "pct_owner_occ", "hispanic", "education", "smoke_rate", "mean_bmi",
-#           "summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax"
-#           )
-# 
-# # need up to 2016 eventually
-# dt <- rbindlist(lapply(f[2:18], read_fst,
-#                        columns = vars,
-#                        as.data.table = TRUE))
-# 
-# gc()
-# 
-# setkey(dt, qid, year)
-# 
-# gc()
-# 
-# # for now, keep only a random sample with 1,000,000 individuals
-# set.seed(17)
-# idx <- sample(dt[,qid], 1000000, replace = FALSE)
-# dt <- dt[qid %in% idx,]
-# save(dt, file = "data/raw/denom_sample.Rdata")
-# rm(idx); gc()
+options(stringsAsFactors = FALSE)
+
+# Read denominator files ---------------------
+# /n/dominici_nsaph_l3/Lab/projects/analytic/
+f <- list.files("data/raw/denom_by_year/", pattern = "\\.fst", full.names = TRUE)
+vars <- c("qid", "year", "hmo_mo", "zip", "age", "race", "sex", "dual", "dead", "statecode",
+          # "poverty", "popdensity", "medianhousevalue", "pct_blk", "medhouseholdincome",
+          # "pct_owner_occ", "hispanic", "education", "smoke_rate", "mean_bmi",
+          "summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax"
+          )
+
+dt <- rbindlist(lapply(f[2:18], read_fst,
+                       columns = vars,
+                       as.data.table = TRUE))
+
+gc()
+
+setkey(dt, qid, year)
+
+gc()
+
+# for now, keep only a random sample with 1,000,000 individuals
+set.seed(17)
+idx <- sample(unique(dt[,qid]), 1000000, replace = FALSE)
+dt <- dt[qid %in% idx,]
+save(dt, file = "data/raw/denom_sample.Rdata")
+rm(idx); gc()
 
 load("data/raw/denom_sample.Rdata")
 
 # for now, require individuals to be in FFS the whole time (can change later)
+# nrow(dt[hmo_mo != 0]) # known race and sex
 dt <- dt[hmo_mo == 0 & # retain FFS only (zero HMO months)
            race != 0 & sex != 0] # known race and sex
 dt <- dt[, hmo_mo := NULL]
