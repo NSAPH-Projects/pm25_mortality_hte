@@ -273,54 +273,71 @@ nrow(cens) / n_indiv # 67%
 
 # ---------- Chronic conditions ----------#
 
-# cond_abbr <- c("hypoth", "ami",
-#                "alzh", "alzhdmta",
-#                "anemia", "asthma", "atrialfb", "hyperp", "breastCancer",
-#                "colorectalCancer", "endometrialCancer", "lungCancer", "prostateCancer",
-#                "cataract", "chrnkidn", "copd", "depressn", "diabetes", "glaucoma", "chf",
-#                "hipfrac", "hyperl", "hypert", "ischmcht", "osteoprs", "ra_oa", "stroke")
-# 
-# cond_name <- c("Acquired Hypothyroidism", "Acute Myocardial Infarction",
-#                "Alzheimer's Disease", "ADRD or Senile Dementia",
-#                "Anemia",
-#                "Asthma", "Atrial Fibrillation", "Benign Prostatic Hyperplasia",
-#                "Cancer, Female/Male Breast", "Cancer, Colorectal", "Cancer, Endometrial",
-#                "Cancer, Lung", "Cancer, Prostate", "Cataract", "Chronic Kidney Disease",
-#                "COPD and Bronchiectasis", "Depression", "Diabetes", "Glaucoma",
-#                "Heart Failure", "Hip/Pelvic Fracture", "Hyperlipidemia", "Hypertension",
-#                "Ischemic Heart Disease", "Osteoporosis",
-#                "Rheumatoid Arthritis/Osteoarthritis", "Stroke/Transient Ischemic Attack")
-# 
-# conditions <- data.frame("cond_abbr" = cond_abbr, "cond_name" = cond_name)
+cond_abbr <- paste0(c("hypoth", "ami",
+               "alzh", "alzhdmta",
+               "anemia", "asthma", "atrialfb", "hyperp", "breastCancer",
+               "colorectalCancer", "endometrialCancer", "lungCancer", "prostateCancer",
+               "cataract", "chrnkidn", "copd", "depressn", "diabetes", "glaucoma", "chf",
+               "hipfrac", "hyperl", "hypert", "ischmcht", "osteoprs", "ra_oa", "stroke"),
+               "_ever")
+
+cond_name <- c("Acquired Hypothyroidism", "Acute Myocardial Infarction",
+               "Alzheimer's Disease", "ADRD or Senile Dementia",
+               "Anemia",
+               "Asthma", "Atrial Fibrillation", "Benign Prostatic Hyperplasia",
+               "Cancer, Female/Male Breast", "Cancer, Colorectal", "Cancer, Endometrial",
+               "Cancer, Lung", "Cancer, Prostate", "Cataract", "Chronic Kidney Disease",
+               "COPD and Bronchiectasis", "Depression", "Diabetes", "Glaucoma",
+               "Heart Failure", "Hip/Pelvic Fracture", "Hyperlipidemia", "Hypertension",
+               "Ischemic Heart Disease", "Osteoporosis",
+               "Rheumatoid Arthritis/Osteoarthritis", "Stroke/Transient Ischemic Attack")
+
+conditions <- data.frame("cond_abbr" = cond_abbr, "cond_name" = cond_name)
 
 
 ### MOVE TO SCRIPT 1 ###
 
 #--------
-cond_abbr <- c("hypert_ever", 
-               "ischmcht_ever", 
-               "diabetes_ever", 
-               "chrnkidn_ever")
-
-cond_name <- c("Hypertension",
-               "Ischemic Heart Disease",
-               "Diabetes",
-               "Chronic Kidney Disease")
-
-conditions <- data.frame("cond_abbr" = cond_abbr,
-                         "cond_name" = cond_name)
+# cond_abbr <- c("hypert_ever", 
+#                "ischmcht_ever", 
+#                "diabetes_ever", 
+#                "chrnkidn_ever")
+# 
+# cond_name <- c("Hypertension",
+#                "Ischemic Heart Disease",
+#                "Diabetes",
+#                "Chronic Kidney Disease")
+# 
+# conditions <- data.frame("cond_abbr" = cond_abbr,
+#                          "cond_name" = cond_name)
 
 # How common is each chronic condition? BEFORE EXPOSURE IN 2010
 prev_overall <- dt[year == 2010, lapply(.SD, function(x) sum(x) / .N * 100),
                    .SDcols = cond_abbr] |>
-  gather(key = "cond_abbr", value = "prev_overall")
+  gather(key = "cond_abbr", value = "prev_overall") |>
+  left_join(conditions, by = "cond_abbr")
+
+# make conditions factors with levels sorted by by overall prevalence (for plotting)
+prev_overall$cond_name <- factor(prev_overall$cond_name, 
+                                 levels = cond_name[order(prev_overall$prev_overall)])
+
+# plot
+prev_overall |>
+  arrange(prev_overall) |>
+  ggplot(aes(x = prev_overall, y = cond_name)) +
+  geom_point(col = "skyblue3", size = 3, alpha = 0.9) +
+  labs(x = "% ever hosp before 2010",
+       y = "",
+       col = "") +
+  theme_bw()
+
 
 #----------------------------------------------------------- by region
 
 # How common is each chronic condition by region?
 prev_region <- dt[, lapply(.SD, function(x) sum(x) / .N * 100),
                   by = census_region,
-                  .SDcols = cond_abbr] |>
+                  .SDcols = paste0(cond_abbr, "_ever")] |>
   gather(key = "cond_abbr", value = "prev_region", -census_region)
 
 # merge with full names for plotting
@@ -345,7 +362,6 @@ prev_df |>
   labs(x = "% ever hosp before 2010",
        y = "",
        col = "") +
-  #scale_x_log10() +
   theme_bw()
 
 
@@ -952,16 +968,13 @@ dt <- dt[year == 2010,]
 # Note: rewriting values in dt to make this table
 
 # change table values
-dt[, sex := factor(sex, levels = c(1, 2), labels = c("Male", "Female"))]
+dt[, sex := factor(sex, levels = c(1, 0), labels = c("Male", "Female"))]
 dt[, dual := factor(dual, levels = c(0, 1), labels = c("Ineligible", "Eligible"))]
 dt[, race := factor(race, levels = c(1:6),
                     labels = c("Non-Hispanic White", "Black (or African-American)",
                                "Other", "Asian/Pacific Islander",
                                "Hispanic", "American Indian/Alaska Native"))]
-# dt[, race := factor(race, levels = c("white", "black", "hispanic", "other_race"),
-#                     labels = c("Non-Hispanic White", "Black (or African-American)",
-#                                "Hispanic", "Other Race"))]
-dt[, dead_lead := factor(dead_lead, levels = c(FALSE, TRUE), 
+dt[, dead_lead := factor(dead_lead, levels = c(0, 1), 
                           labels = c("Survived", "Died"))]
 dt[, census_region := factor(census_region)]
 
@@ -970,7 +983,6 @@ dt[, census_region := factor(census_region)]
 # individial-level
 setnames(dt, "age_grp", "Age group")
 setnames(dt, "race", "Race")
-#setnames(dt, "race", "Race")
 setnames(dt, "sex", "Sex")
 setnames(dt, "dual", "Medicaid eligibility")
 
@@ -989,9 +1001,9 @@ setnames(dt, "pm25", "Mean annual PM2.5 (ug/m3)")
 # setnames(dt, "summer_rmax", "Summer average maximum relative humidity")
 # setnames(dt, "winter_rmax", "Winter average maximum relative humidity")
 
-# county-level
-setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
-setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
+# # county-level
+# setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
+# setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
 
 # region
 setnames(dt, "census_region", "Census region")
