@@ -74,10 +74,10 @@ options(stringsAsFactors = FALSE)
 # Read denominator files ---------------------
 # /n/dominici_nsaph_l3/Lab/projects/analytic/
 f <- list.files("data/raw/denom_by_year/", pattern = "\\.fst", full.names = TRUE)
-vars <- c("qid", "year", "hmo_mo", "zip", "age", "race", "sex", "dual", "dead", "statecode",
+vars <- c("qid", "year", "hmo_mo", "zip", "age", "race", "sex", "dual", "dead", "statecode"#,
           # "poverty", "popdensity", "medianhousevalue", "pct_blk", "medhouseholdincome",
           # "pct_owner_occ", "hispanic", "education", "smoke_rate", "mean_bmi",
-          "summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax"
+          #"summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax"
           )
 
 dt <- rbindlist(lapply(f[2:18], read_fst,
@@ -92,12 +92,11 @@ gc()
 
 # for now, keep only a random sample with 1,000,000 individuals
 set.seed(17)
-idx <- sample(unique(dt[,qid]), 1000000, replace = FALSE)
-dt <- dt[qid %in% idx,]
+ids <- sample(unique(dt[,qid]), 1000000, replace = FALSE)
+dt <- dt[qid %in% ids,]
 save(dt, file = "data/raw/denom_sample.Rdata")
-rm(idx); gc()
 
-load("data/raw/denom_sample.Rdata")
+#load("data/raw/denom_sample.Rdata")
 
 # for now, require individuals to be in FFS the whole time (can change later)
 # nrow(dt[hmo_mo != 0]) # known race and sex
@@ -188,22 +187,58 @@ dt[, age_grp := cut(age, breaks = c(64, 74, 84, Inf))]
 
 gc()
 
-conditions <- c("hypert_ever", "ischmcht_ever", "diabetes_ever", "chrnkidn_ever")
+# # Load each file and combine
+# prev_hosp <- rbindlist(lapply(2000:2014, function(y) {
+#   #read_parquet(paste0("data/raw/prev_hosp/prev_hosp_", y, ".parquet"))
+#   file_path <- paste0("data/raw/prev_hosp/prev_hosp_", y, ".parquet")
+#   read_parquet(file_path, col_select = c("bene_id", "rfrnc_yr", conditions))
+# }))
 
-# Load each file and combine
-prev_hosp <- rbindlist(lapply(2001:2015, function(y) {
-  #read_parquet(paste0("data/raw/prev_hosp/prev_hosp_", y, ".parquet"))
-  file_path <- paste0("data/raw/prev_hosp/prev_hosp_", y, ".parquet")
-  read_parquet(file_path, col_select = c("bene_id", "rfrnc_yr", conditions))
-}))
+# conditions of interest
+conditions <- paste0(c("hypoth", "ami",
+                       "alzh", "alzhdmta",
+                       "anemia", "asthma", "atrialfb", "hyperp", "breastCancer",
+                       "colorectalCancer", "endometrialCancer", "lungCancer", "prostateCancer",
+                       "cataract", "chrnkidn", "copd", "depressn", "diabetes", "glaucoma", "chf",
+                       "hipfrac", "hyperl", "hypert", "ischmcht", "osteoprs", "ra_oa", "stroke"),
+                     "_ever")
+  
 
-gc()
+# try loading one year, filtering to my subsample, then loading the next year
+prev_hosp <- data.table()
+hosp_years <- 2000:2014
+# loop through years
+for (i in 1:length(hosp_years)) {
+  
+  # get file path
+  file_path <- paste0("data/raw/prev_hosp/prev_hosp_", hosp_years[i], ".parquet")
+  
+  # load that year into the list
+  one_year <- read_parquet(file_path,
+                           col_select = c("bene_id", "rfrnc_yr", all_of(conditions)))
+  gc()
+  setDT(one_year)
+  gc()
+  
+  # restrict to individuals in my random sample
+  one_year <- one_year[bene_id %in% ids,]
+  gc()
+  
+  # save into list
+  prev_hosp <- rbindlist(list(prev_hosp, one_year), fill = TRUE)
+  rm(one_year); gc()
+  
+}
 
 # change _ever columns so they are 0/1
 prev_hosp[, (conditions) := lapply(.SD, function(x) ifelse(is.na(x), 0, 1)), .SDcols = (conditions)]
 
 
 #---------- Merge with Previous Hospitalizations ----------#
+
+# take the year column and add 1 
+# (since we're interested in hospitalizations that occurred prior to exposure)
+prev_hosp[, rfrnc_yr := rfrnc_yr + 1]
 
 # Merge by beneficiary ID
 all_hosp <- merge(dt, prev_hosp, by.x = c("qid", "year"), 
@@ -219,37 +254,32 @@ rm(dt, prev_hosp); gc()
 # dir_confounders <- "/n/dominici_nsaph_l3/Lab/projects/analytic/confounders/"
 # dir_temp <- "/n/dominici_nsaph_l3/Lab/data/gridmet_flat/"
 
-pm25_df <- rbindlist(lapply(2001:2015, function(y) {
-  dat <- readRDS(paste0("data/raw/pm25/PM25_v2/annual/", y, ".rds"))
-  dat <- dat[,c("ZIP", "pm25")]
-  dat$year <- y
-  dat
-}))
-
-setDT(pm25_df)
-
-# Make ZIP integers
-pm25_df[, ZIP := as.integer(ZIP)]
+# pm25_df <- rbindlist(lapply(2001:2015, function(y) {
+#   dat <- readRDS(paste0("data/raw/pm25/PM25_v2/annual/", y, ".rds"))
+#   dat <- dat[,c("ZIP", "pm25")]
+#   dat$year <- y
+#   dat
+# }))
+# 
+# setDT(pm25_df)
+# 
+# # Make ZIP integers
+# pm25_df[, ZIP := as.integer(ZIP)]
 
 # Load zip code covars
 zip_yr_df <-
   rbindlist(lapply(2001:2015, function(y) {
-    fread(paste0("data/raw/confounders/merged_confounders_", y, ".csv"))
+    readRDS(paste0("data/raw/confounders/aggregate_data_", y, ".rds"))
   }))
 
-# Remove columns we don't need
-zip_yr_df <- zip_yr_df[, (c("V1", "zcta",
-                              "population",
-                              "pct_asian", "pct_native", "pct_white",
-                              "pm25.current_year", "ozone.current_year", "no2.current_year",
-                              "ozone_summer.current_year",
-                              "pm25.one_year_lag", "ozone.one_year_lag", "no2.one_year_lag",
-                              "ozone_summer.one_year_lag")) := NULL]
+# Select the columns I need
+zip_yr_df <- zip_yr_df[, c("zip", "year", "pm25", "mean_bmi", "smoke_rate",
+                           "hispanic", "pct_blk", "medhouseholdincome", "medianhousevalue",
+                           "poverty", "education", "popdensity", "pct_owner_occ",
+                           "summer_tmmx", "winter_tmmx", "summer_rmax", "winter_rmax")]
 
-# Merge confounders with pm2.5 data
-zip_yr_df <- merge(zip_yr_df, pm25_df, by = c("ZIP", "year"))
-
-rm(pm25_df); gc()
+# make zip an integer
+zip_yr_df[, zip := as.integer(zip)]
 
 gc()
 
@@ -257,8 +287,7 @@ gc()
 #---------- Merge Hospitalizations with ZIP Confounders ----------#
 
 # Merge hospitalizations with ZIP confounders
-dt <- merge(all_hosp, zip_yr_df, by.x = c("zip", "year"), 
-                 by.y = c("ZIP", "year"), all.x = TRUE)
+dt <- merge(all_hosp, zip_yr_df, by = c("zip", "year"), all.x = TRUE)
 rm(all_hosp, zip_yr_df); gc()
 
 gc()
@@ -338,16 +367,24 @@ rm(state_to_div); gc()
 # change name of pct hispanic column
 setnames(dt, "hispanic", "pct_hispanic")
 
-# Create indicator variables
-race_indicators <- dcast(dt, qid ~ race, fun.aggregate = length)
+# # Create indicator variables
+# race_indicators <- dcast(dt, qid ~ race, fun.aggregate = length)
+
+# make race a factor
+dt[, race := factor(race)]
+
+# Create a list of dummy columns using lapply
+race_indicators <- sapply(levels(dt$race), function(level) as.integer(dt$race == level)) |>
+  as.data.frame()
 
 # Change race indicator column names
-setnames(race_indicators,
-         old = colnames(race_indicators)[2:7],
-         new = c("white", "black", "other", "asian", "hispanic", "native"))
+names(race_indicators) <- c(paste0("race_", c("white", "black", "other", "asian", "hispanic", "native")))
+# setnames(race_indicators,
+#          old = colnames(race_indicators),
+#          new = paste0("race_", c("white", "black", "other", "asian", "hispanic", "native")))
 
 # Bind indicators to original data.table
-dt <- merge(dt, race_indicators, by = "qid")
+dt <- cbind(dt, race_indicators)
 rm(race_indicators); gc()
 
 
@@ -357,14 +394,16 @@ rm(race_indicators); gc()
 dt[,sex := ifelse(sex == 2, 0, sex)]
 
 
-#---------- Age indicator variables
+# #---------- Age indicator variables
+# 
+# age_grp_indicators <- dcast(dt, qid ~ age_grp, fun.aggregate = length)
+# 
+# # Bind indicators to original data.table
+# dt <- merge(dt, age_grp_indicators, by = "qid")
+# rm(age_grp_indicators); gc()
 
-age_grp_indicators <- dcast(dt, qid ~ age_grp, fun.aggregate = length)
-
-# Bind indicators to original data.table
-dt <- merge(dt, age_grp_indicators, by = "qid")
-rm(age_grp_indicators); gc()
-
+# I don't need group indicators (using continuous age)
+# if I decide to do indicators, see new race indicators
 
 #---------- Dual indicator 
 
