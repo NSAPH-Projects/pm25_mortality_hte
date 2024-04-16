@@ -90,9 +90,9 @@ setkey(dt, qid, year)
 
 gc()
 
-# for now, keep only a random sample with 1,000,000 individuals
+# for now, keep only a random sample with 10,000,000 individuals
 set.seed(17)
-ids <- sample(unique(dt[,qid]), 1000000, replace = FALSE)
+ids <- sample(unique(dt[,qid]), 10000000, replace = FALSE)
 dt <- dt[qid %in% ids,]
 save(dt, file = "data/raw/denom_sample.Rdata")
 
