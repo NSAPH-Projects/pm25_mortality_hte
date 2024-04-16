@@ -312,7 +312,7 @@ conditions <- data.frame("cond_abbr" = cond_abbr, "cond_name" = cond_name)
 #                          "cond_name" = cond_name)
 
 # How common is each chronic condition? BEFORE EXPOSURE IN 2010
-prev_overall <- dt[year == 2010, lapply(.SD, function(x) sum(x) / .N * 100),
+prev_overall <- dt[year == 2015, lapply(.SD, function(x) sum(x) / .N * 100),
                    .SDcols = cond_abbr] |>
   gather(key = "cond_abbr", value = "prev_overall") |>
   left_join(conditions, by = "cond_abbr")
@@ -325,8 +325,9 @@ prev_overall$cond_name <- factor(prev_overall$cond_name,
 prev_overall |>
   arrange(prev_overall) |>
   ggplot(aes(x = prev_overall, y = cond_name)) +
+  xlim(c(0, 40)) +
   geom_point(col = "skyblue3", size = 3, alpha = 0.9) +
-  labs(x = "% ever hosp before 2010",
+  labs(x = "% ever hosp before 2015",
        y = "",
        col = "") +
   theme_bw()
