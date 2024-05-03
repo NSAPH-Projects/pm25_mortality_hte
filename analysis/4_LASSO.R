@@ -2,19 +2,22 @@
 ########################################################
 ### Hetergeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
-### Group logit LASSO
+### LASSO
 ########################################################
 
 library(data.table)
 library(fst)
 library(ggplot2)
 library(dplyr)
+library(readr)
 
-load("data/intermediate/rolling_cohort.RData")
+dt <- read_rds("data/intermediate/rolling_cohort.rds")
 
-set.seed(17)
-keep_idx <- sample(unique(dt[,qid]), 10000, replace = FALSE)
-dt <- dt[qid %in% keep_idx,]
+# # Work with a random sample for now
+# set.seed(17)
+# keep_idx <- sample(unique(dt[,qid]), 30000000, replace = FALSE)
+# dt <- dt[qid %in% keep_idx,]
+# gc()
 
 # save(dt, file = "data/intermediate/rolling_cohort_1000.RData")
 # 
@@ -50,56 +53,80 @@ rm(dummy_cols1, dummy_cols2, dummy_cols3)
 
 #----- try grouping chronic conditions -----#
 
-names(dt)
+#names(dt)
 
 # create new columns for grouped conditions
-dt[, c("group_cvd_ever", "group_pulm_ever", "group_neuro_ever", 
-       "group_cancer_ever", "group_muscskel_ever", "group_blood_ever"#,
-       #"group_eyes_ever"
-       ) := list(
-  as.integer(ami_ever == 1 | chf_ever == 1 | atrialfb_ever == 1 | hypert_ever == 1 | 
-               hyperl_ever == 1 | ischmcht_ever == 1 | stroke_ever == 1),
-  as.integer(asthma_ever == 1 | copd_ever == 1),
-  as.integer(alzh_ever == 1 | alzhdmta_ever == 1, depressn_ever == 1),
-  as.integer(breastCancer_ever == 1 | colorectalCancer_ever == 1 | endometrialCancer_ever == 1,
-             lungCancer_ever == 1 | prostateCancer_ever == 1),
-  as.integer(osteoprs_ever == 1 | ra_oa_ever == 1 | hipfrac_ever == 1),
-  as.integer(diabetes_ever == 1 | chrnkidn_ever == 1 | anemia_ever == 1)#,
-  #as.integer(cataract_ever == 1 | glaucoma_ever == 1)
+dt[, c(
+  "group_cancer_ever", "group_metabolic_ever", "group_blood_ever", "group_mental_ever",
+  "group_circulatory_ever", "group_respiratory_ever", 
+  "group_urinary_ever", "group_skeletal_ever"
+  ) := list(
+    as.integer(breastCancer_ever == 1 | colorectalCancer_ever == 1 | endometrialCancer_ever == 1,
+               lungCancer_ever == 1 | prostateCancer_ever == 1),
+    as.integer(hypoth_ever == 1 | diabetes_ever == 1),
+    as.integer(anemia_ever == 1),
+    as.integer(alzh_ever == 1 | alzhdmta_ever == 1, depressn_ever == 1),
+    as.integer(ami_ever == 1 | chf_ever == 1 | atrialfb_ever == 1 | hypert_ever == 1 | 
+                ischmcht_ever == 1 | stroke_ever == 1 | hyperl_ever == 1),
+    as.integer(asthma_ever == 1 | copd_ever == 1),
+    as.integer(chrnkidn_ever == 1 | hyperp_ever == 1),
+    as.integer(osteoprs_ever == 1 | ra_oa_ever == 1, hipfrac_ever == 1)
 )]
-# not using hypoth_ever (hypothyroidism) and hyperp_ever (benign prostatic hyperplasia)
+
+
+
+#----- get prevalence of groups in 2010 -----#
+
+# # How common is each chronic condition? BEFORE EXPOSURE IN 2010
+# prev_overall <- dt[year == 2010, lapply(.SD, function(x) sum(x) / .N * 100),
+#                    .SDcols = names(dt)[grep("^group_", names(dt))]] |>
+#   gather(key = "cond_abbr", value = "prev_overall") |>
+#   arrange(prev_overall)
+# 
+# prev_overall$cond_abbr <- factor(prev_overall$cond_abbr, 
+#                                  levels = prev_overall$cond_abbr[order(prev_overall$prev_overall)])
+# 
+# # plot
+# prev_overall |>
+#   ggplot(aes(x = prev_overall, y = cond_abbr)) +
+#   xlim(c(0, 40)) +
+#   geom_point(col = "skyblue3", size = 3, alpha = 0.9) +
+#   labs(x = "% ever hosp before 2010",
+#        y = "",
+#        col = "") +
+#   theme_bw()
 
 
 #----- get correlations between chronic conditions in 2010 -----#
 
-library(proxy)
-
-# 27 chronic conditions
-condition_cols <-dt %>%
-  filter(year == "2010") %>%
-  #select(names(dt)[grep("^((?!pm25).)*_ever$", names(dt), perl = TRUE)])
-  select(names(dt)[grep("^group_", names(dt))])
-colnames(condition_cols) <- sub("_ever$", "", colnames(condition_cols))
-# Pearson's correlation (works for binary data)
-cor(condition_cols) %>%
-  heatmap(Rowv = NA, Colv = NA,
-          margins = c(10, 10),
-          symm = TRUE)
-max(cor(condition_cols)[cor(condition_cols) != 1])
-
-
-# chronic conditions (grouped)
-condition_cols <-dt %>%
-  filter(year == "2010") %>%
-  select(names(dt)[grep("^((?!group).)*_ever$", names(dt), perl = TRUE)])
-colnames(condition_cols) <- sub("_ever$", "", colnames(condition_cols))
-# Pearson's correlation (works for binary data)
-cor(condition_cols) %>%
-  heatmap(Rowv = NA, Colv = NA,
-          margins = c(7, 5),
-          symm = TRUE)
-# max val that isn't 1
-max(cor(condition_cols)[cor(condition_cols) != 1])
+# library(proxy) # for heat map
+# 
+# # 27 chronic conditions
+# condition_cols <-dt %>%
+#   filter(year == "2010") %>%
+#   #select(names(dt)[grep("^((?!pm25).)*_ever$", names(dt), perl = TRUE)])
+#   select(names(dt)[grep("^group_", names(dt))])
+# colnames(condition_cols) <- sub("_ever$", "", colnames(condition_cols))
+# # Pearson's correlation (works for binary data)
+# cor(condition_cols) %>%
+#   heatmap(Rowv = NA, Colv = NA,
+#           margins = c(10, 10),
+#           symm = TRUE)
+# max(cor(condition_cols)[cor(condition_cols) != 1])
+# 
+# 
+# # chronic conditions (grouped)
+# condition_cols <-dt %>%
+#   filter(year == "2010") %>%
+#   select(names(dt)[grep("^((?!group).)*_ever$", names(dt), perl = TRUE)])
+# colnames(condition_cols) <- sub("_ever$", "", colnames(condition_cols))
+# # Pearson's correlation (works for binary data)
+# cor(condition_cols) %>%
+#   heatmap(Rowv = NA, Colv = NA,
+#           margins = c(7, 5),
+#           symm = TRUE)
+# # max val that isn't 1
+# max(cor(condition_cols)[cor(condition_cols) != 1])
 
 
 #--- make columns for interactions (so they can easily be in the matrix)
@@ -137,7 +164,7 @@ X <- dt[, c(
   "sex",
   "age",
   "dual",
-  #"white",
+  #"race_white",
   "race_black", "race_other", "race_asian", "race_native", "race_hispanic",
 
   # chronic conditions
@@ -149,7 +176,7 @@ X <- dt[, c(
   paste0("follow_", 2:15), # year 1 is reference
 
   # census region indicators
-  # "Midwest", # make midwest the reference
+  # "Midwest", # make midwest the reference (same as outcome model)
   "Northeast", "South", "West",
   
   # area-level potential confounders
@@ -164,10 +191,6 @@ X <- dt[, c(
 ), with = FALSE] |> as.matrix()
 
 
-# and get X with interaction terms only (Falco wants to see this)
-X_interact <- X[, paste0("pm25:", interact_cols)]
-
-
 # y is outcome
 y <- dt[,dead_lead]
 
@@ -176,54 +199,58 @@ y <- dt[,dead_lead]
 
 library(glmnet)
 
-# need to fix penalty.factor again!
-# but first clean up this whole messy script.
 
 
+#####
+# # cross-validation to get best lambda
+#colnames(X)
+set.seed(17)
+lasso_cv <- cv.glmnet(X, y,
+                      family = "binomial", alpha = 1, standardize = TRUE,
+                      #penalty.factor = c(rep(0, 78), rep(1, 113-78)),
+                      penalty.factor = c(rep(0, 62), rep(1, 78-62)))
+plot(lasso_cv)
+best_lambda <- lasso_cv$lambda.min
+paste0("Best lambda: ", best_lambda)
+lasso <- glmnet(X, y,
+                family = "binomial", alpha = 1, standardize = TRUE,
+                #penalty.factor = c(rep(0, 78), rep(1, 113-78)),
+                penalty.factor = c(rep(0, 62), rep(1, 78-62)),
+                lambda = best_lambda)
+
+# or test many lambdas
+# note: these test lambdas are in decreasing order!
+# these values correspond to x-axis values but in flipped order
+# test_lambdas <- 10^seq(-4, -1.5, length = 100)
+# lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = test_lambdas)
+# plot(lasso, xvar = "lambda", label = T)
+#
+# lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = 0.003)
 
 
-# #####
-# # # cross-validation to get best lambda
-# set.seed(17)
-# lasso_cv <- cv.glmnet(X, y,
-#                       family = "binomial", alpha = 1, standardize = TRUE,
-#                       #penalty.factor = c(rep(0, 78), rep(1, 113-78)),
-#                       penalty.factor = c(rep(0, 60), rep(1, 74-60)))
-# plot(lasso_cv)
-# best_lambda <- lasso_cv$lambda.min
+# # or just choose a value for lambda
 # lasso <- glmnet(X, y,
 #                 family = "binomial", alpha = 1, standardize = TRUE,
-#                 #penalty.factor = c(rep(0, 78), rep(1, 113-78)),
-#                 penalty.factor = c(rep(0, 60), rep(1, 74-60)),
-#                 lambda = best_lambda)
-# 
-# # or test many lambdas
-# # note: these test lambdas are in decreasing order!
-# # these values correspond to x-axis values but in flipped order
-# # test_lambdas <- 10^seq(-4, -1.5, length = 100)
-# # lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = test_lambdas)
-# # plot(lasso, xvar = "lambda", label = T)
-# #
-# # lasso <- glmnet(X, y, family = "binomial", alpha = 1, lambda = 0.003)
-# 
-# 
-# # # or just choose a value for lambda
-# # lasso <- glmnet(X, y,
-# #                 family = "binomial", alpha = 1, standardize = TRUE,
-# #                 #penalty.factor = c(0, rep(1, ncol(X) - 1)),
-# #                 penalty.factor = c(rep(0, 78), rep(1, 113-78)),
-# #                 lambda = 0.0005)
-# 
-# 
-# #save(lasso, file = "results/lasso/lasso_cv.RData")
-# save(lasso, file = "results/lasso/lasso_cv_groups.RData")
-# #load("results/lasso/lasso_cv.RData")
-# 
-# # view lasso results
-# coef(lasso)
-# 
-# #########################################################
-# 
+#                 #penalty.factor = c(0, rep(1, ncol(X) - 1)),
+#                 penalty.factor = c(rep(0, 78), rep(1, 113-78)),
+#                 lambda = 0.0005)
+
+
+#save(lasso, file = "results/lasso/lasso_cv.RData")
+#save(lasso, file = "results/lasso/lasso_cv_groups.RData")
+#save(lasso, file = "results/lasso/all_final_model.RData")
+write_rds(lasso, file = "results/lasso/all_final.rds")
+
+gc()
+
+#load("results/lasso/lasso_cv.RData")
+#load("results/lasso/lasso_cv_ccs.RData")
+
+# view lasso results
+coef(lasso)
+
+#########################################################
+
 # # now try without main effects for chronic conditions
 # # for some reason this took like 3 hours to run
 # 
@@ -233,24 +260,28 @@ library(glmnet)
 # 
 # X_no_main_ccw <- X[, columns_to_keep]
 # 
-# 
+# #colnames(X_no_main_ccw)
 # set.seed(17)
 # lasso_cv <- cv.glmnet(X_no_main_ccw, y,
 #                       family = "binomial", alpha = 1, standardize = TRUE,
 #                       #penalty.factor = c(rep(0, 51), rep(1, 86-51)),
-#                       penalty.factor = c(rep(0, 54), rep(1, 68-54)))
+#                       penalty.factor = c(rep(0, 54), rep(1, 70-54)))
 # plot(lasso_cv)
 # best_lambda <- lasso_cv$lambda.min
+# best_lambda
 # lasso <- glmnet(X_no_main_ccw, y,
 #                 family = "binomial", alpha = 1, standardize = TRUE,
 #                 #penalty.factor = c(rep(0, 51), rep(1, 86-51)),
-#                 penalty.factor = c(rep(0, 54), rep(1, 68-54)),
+#                 penalty.factor = c(rep(0, 54), rep(1, 70-54)),
 #                 lambda = best_lambda)
 # 
 # #save(lasso, file = "results/lasso/lasso_cv_no_main_ccw.RData")
-# save(lasso, file = "results/lasso/lasso_cv_no_main_ccw_groups.RData")
+# #save(lasso, file = "results/lasso/lasso_cv_no_main_ccw_groups.RData")
+# save(lasso, file = "results/lasso/lasso_cv_no_main_ccw_ccs_6mil.RData")
+# 
 # 
 # #load("results/lasso/lasso_cv_no_main_ccw.RData")
+# #load("results/lasso/lasso_cv_no_main_ccw_ccs.RData")
 # 
 # # view lasso results
 # coef(lasso)
@@ -261,46 +292,46 @@ library(glmnet)
 # now try with three-way interactions
 # interactions between PM2.5 and each combo of individual level
 
-# first, get two-way interactions between all individual-level variables
-two_way_matrix <- model.matrix(~ .^2 - 1, dt[, interact_cols, with = FALSE])
-
-# ignore the main effects (keep interactions only)
-two_way_matrix <- two_way_matrix[, grep(":", colnames(two_way_matrix))]
-
-# bind columns to dt
-dt <- cbind(dt, two_way_matrix)
-
-# now make interactions between PM2.5 and all these two-way interactions
-# columns for interactions
-interact_cols <- colnames(two_way_matrix)
-
-# get new interactions columns in dt
-dt <- new_interact_col(dt, interact_cols)
-
-#### run lasso again
-
-# keep all columns in X and all interactions
-X_three_way <- dt[, c(colnames(X), colnames(dt)[grep(":", colnames(dt))]), with = FALSE] |>
-  as.matrix()
-
-lasso_cv <- cv.glmnet(X_three_way, y,
-                      family = "binomial", alpha = 1, standardize = TRUE,
-                      #penalty.factor = c(rep(0, 78), rep(1, ncol(X_three_way) - 78)),
-                      penalty.factor = c(rep(0, 60), rep(1, ncol(X_three_way) - 60)))
-plot(lasso_cv)
-best_lambda <- lasso_cv$lambda.min
-lasso_three_way <- glmnet(X_three_way, y,
-                family = "binomial", alpha = 1, standardize = TRUE,
-                #penalty.factor = c(rep(0, 78), rep(1, ncol(X_three_way) - 78)),
-                penalty.factor = c(rep(0, 60), rep(1, ncol(X_three_way) - 60)),
-                lambda = best_lambda)
-save(lasso_three_way, file = "results/lasso/lasso_cv_three_way.RData")
-#load("results/lasso/lasso_cv_three_way.RData")
-
-lasso_coefs <- coef(lasso_three_way)[,1]
-selected_coefs <- lasso_coefs[lasso_coefs != 0]
-
-selected_coefs
+# # first, get two-way interactions between all individual-level variables
+# two_way_matrix <- model.matrix(~ .^2 - 1, dt[, interact_cols, with = FALSE])
+# 
+# # ignore the main effects (keep interactions only)
+# two_way_matrix <- two_way_matrix[, grep(":", colnames(two_way_matrix))]
+# 
+# # bind columns to dt
+# dt <- cbind(dt, two_way_matrix)
+# 
+# # now make interactions between PM2.5 and all these two-way interactions
+# # columns for interactions
+# interact_cols <- colnames(two_way_matrix)
+# 
+# # get new interactions columns in dt
+# dt <- new_interact_col(dt, interact_cols)
+# 
+# #### run lasso again
+# 
+# # keep all columns in X and all interactions
+# X_three_way <- dt[, c(colnames(X), colnames(dt)[grep(":", colnames(dt))]), with = FALSE] |>
+#   as.matrix()
+# 
+# lasso_cv <- cv.glmnet(X_three_way, y,
+#                       family = "binomial", alpha = 1, standardize = TRUE,
+#                       #penalty.factor = c(rep(0, 78), rep(1, ncol(X_three_way) - 78)),
+#                       penalty.factor = c(rep(0, 60), rep(1, ncol(X_three_way) - 60)))
+# plot(lasso_cv)
+# best_lambda <- lasso_cv$lambda.min
+# lasso_three_way <- glmnet(X_three_way, y,
+#                 family = "binomial", alpha = 1, standardize = TRUE,
+#                 #penalty.factor = c(rep(0, 78), rep(1, ncol(X_three_way) - 78)),
+#                 penalty.factor = c(rep(0, 60), rep(1, ncol(X_three_way) - 60)),
+#                 lambda = best_lambda)
+# save(lasso_three_way, file = "results/lasso/lasso_cv_three_way.RData")
+# #load("results/lasso/lasso_cv_three_way.RData")
+# 
+# lasso_coefs <- coef(lasso_three_way)[,1]
+# selected_coefs <- lasso_coefs[lasso_coefs != 0]
+# 
+# selected_coefs
 
 
 #########################################################
@@ -385,9 +416,9 @@ selected_coefs
 #              main = "")
 # 
 # # plot probability of being selected (with cutoff)
-# plot.stabsel(stabs_lasso, 
+# plot.stabsel(stabs_lasso,
 #              type = "maxsel",
-#              main = "", 
+#              main = "",
 #              np = 15)
 # 
 # # now interactions only (only difference is no penalty.factor)
