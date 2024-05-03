@@ -7,7 +7,7 @@
 
 library(data.table)
 library(fst)
-library(readr)
+library(arrow)
 
 # # Load data
 #dt <- read_rds("data/intermediate/rolling_cohort.rds")
@@ -57,14 +57,14 @@ outcome_fit <- glm(dead_lead ~
                      # 
                      # # year of follow-up
                      # year_follow + 
-
+                     
                      # census division
                      #as.factor(census_region) +
                      
                      # sex, age, race, Medicaid eligibility
-                     sex + age + #dual + 
+                   sex + age + #dual + 
                      race_black + race_other + race_asian + race_hispanic + race_native +
-
+                     
                      # # chronic conditions (all start with "group_")
                      # group_cancer_ever + group_metabolic_ever + group_blood_ever +
                      # group_mental_ever + group_circulatory_ever + group_respiratory_ever +
@@ -75,21 +75,21 @@ outcome_fit <- glm(dead_lead ~
                      # pct_owner_occ + education + smoke_rate + mean_bmi +
                      # pct_blk + pct_hispanic +
                      # summer_tmmx + summer_rmax + winter_tmmx + winter_rmax #+
-                     
-                     # interactions with race only
-                    pm25:race_black + pm25:race_other + pm25:race_asian +
+                   
+                   # interactions with race only
+                   pm25:race_black + pm25:race_other + pm25:race_asian +
                      pm25:race_hispanic + pm25:race_native
                    
-                     
-                     # # individual-level one-way interactions (selected by lasso)
-                     # pm25:group_cancer_ever +
-                     # pm25:group_metabolic_ever +
-                     # pm25:group_blood_ever +
-                     # pm25:group_mental_ever +
-                     # pm25:group_circulatory_ever +
-                     # pm25:group_respiratory_ever +
-                     # pm25:group_urinary_ever +
-                     # pm25:group_skeletal_ever
+                   
+                   # # individual-level one-way interactions (selected by lasso)
+                   # pm25:group_cancer_ever +
+                   # pm25:group_metabolic_ever +
+                   # pm25:group_blood_ever +
+                   # pm25:group_mental_ever +
+                   # pm25:group_circulatory_ever +
+                   # pm25:group_respiratory_ever +
+                   # pm25:group_urinary_ever +
+                   # pm25:group_skeletal_ever
                    , 
                    
                    family = binomial(), 

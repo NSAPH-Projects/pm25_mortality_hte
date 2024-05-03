@@ -13,7 +13,7 @@ library(dplyr)
 library(tidyr)
 library(table1)
 library(magrittr)
-library(readr)
+library(arrow)
 
 dt <- read_rds("data/intermediate/rolling_cohort.rds")
 #load("data/intermediate/rolling_cohort_1000.RData")

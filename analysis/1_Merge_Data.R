@@ -52,7 +52,7 @@ library(fst)
 library(arrow)
 library(lubridate)
 library(tidyr)
-library(readr)
+library(arrow)
 
 
 ### CODE BELOW COPIED FROM DANIEL MORK

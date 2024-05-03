@@ -9,7 +9,7 @@ library(data.table)
 library(fst)
 library(ggplot2)
 library(dplyr)
-library(readr)
+library(arrow)
 
 dt <- read_rds("data/intermediate/rolling_cohort.rds")
 
