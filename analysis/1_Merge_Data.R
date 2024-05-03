@@ -52,6 +52,7 @@ library(fst)
 library(arrow)
 library(lubridate)
 library(tidyr)
+library(readr)
 
 
 ### CODE BELOW COPIED FROM DANIEL MORK
@@ -91,10 +92,10 @@ setkey(dt, qid, year)
 gc()
 
 # for now, keep only a random sample with 10,000,000 individuals
-set.seed(17)
-ids <- sample(unique(dt[,qid]), 10000000, replace = FALSE)
-dt <- dt[qid %in% ids,]
-save(dt, file = "data/raw/denom_sample.Rdata")
+# set.seed(17)
+# ids <- sample(unique(dt[,qid]), 10000000, replace = FALSE)
+# dt <- dt[qid %in% ids,]
+# save(dt, file = "data/raw/denom_sample.Rdata")
 
 #load("data/raw/denom_sample.Rdata")
 
@@ -204,7 +205,7 @@ conditions <- paste0(c("hypoth", "ami",
                      "_ever")
   
 
-# try loading one year, filtering to my subsample, then loading the next year
+# doing this because hopefully it will use less memory
 prev_hosp <- data.table()
 hosp_years <- 2000:2014
 # loop through years
@@ -220,9 +221,9 @@ for (i in 1:length(hosp_years)) {
   setDT(one_year)
   gc()
   
-  # restrict to individuals in my random sample
-  one_year <- one_year[bene_id %in% ids,]
-  gc()
+  # # restrict to individuals in my random sample
+  # one_year <- one_year[bene_id %in% ids,]
+  # gc()
   
   # save into list
   prev_hosp <- rbindlist(list(prev_hosp, one_year), fill = TRUE)
@@ -444,5 +445,5 @@ dt <- dt[complete.cases(dt[, ..cols_to_check])]
 # setorder(dt, cols = census_region)
 
 # Save
-save(dt, file = "data/intermediate/rolling_cohort.RData")
+write_rds(dt, file = "data/intermediate/rolling_cohort.rds")
 
