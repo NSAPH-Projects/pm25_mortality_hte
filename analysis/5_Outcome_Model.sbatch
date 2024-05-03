@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH -p fasse # partition (queue)
-#SBATCH -c 6 # number of cores
-#SBATCH --mem=24GB # memory pool for all cores
-#SBATCH -t 00:15:00 # time 
+#SBATCH -p fasse_ultramem # partition (queue)
+#SBATCH -c 63 # number of cores
+#SBATCH --mem=2000GB # memory pool for all cores
+#SBATCH -t 12:00:00 # time 
 #SBATCH -o slurm-outcome-model-%j.out
 
 module load R/4.2.2-fasrc01
