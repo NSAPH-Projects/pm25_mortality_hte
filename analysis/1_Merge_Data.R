@@ -445,5 +445,5 @@ dt <- dt[complete.cases(dt[, ..cols_to_check])]
 # setorder(dt, cols = census_region)
 
 # Save
-write_rds(dt, file = "data/intermediate/rolling_cohort.rds")
+saveRDS(dt, file = "data/intermediate/rolling_cohort.rds")
 
