@@ -7,4 +7,4 @@
 
 module load R/4.2.2-fasrc01
 
-Rscript --vanilla analysis/1_Merge_Data.R
+Rscript --vanilla analysis/1_merge_data.R

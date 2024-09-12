@@ -7,4 +7,4 @@
 
 module load R/4.2.2-fasrc01
 
-Rscript --vanilla analysis/2_Explore_Data.R
+Rscript --vanilla analysis/2_explore_data.R
