@@ -608,7 +608,7 @@ ggplot() +
 
 num_ccw_freq <- table(num_ccw)
 num_ccw_freq
-# about 24% have never been hospitalized with one of these conditions
+# about 52% have never been hospitalized with one of these conditions
 
 #----------------------------------------------------------- by region
 
