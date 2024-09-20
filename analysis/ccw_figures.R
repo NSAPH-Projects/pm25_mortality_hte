@@ -139,27 +139,49 @@ condition_cols <- dt %>%
 colnames(condition_cols) <- cond_name # only works if dfs are in the same order
 
 # Pearson's correlation (works for binary data)
-cor_df <- cor(condition_cols)
-
-# # Custom color scale
-# custom_colors <- colorRampPalette(c("blue", "white", "red"))(100)
-
-# make heat map
-# this should have a legend, but base R doesn't have an option for that
-pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 6, height = 6)
-cor_df %>%
-  heatmap(Rowv = NA, 
-          Colv = NA,
-          margins = c(13, 13),
-          #col = custom_colors,
-          symm = TRUE, # determines if it's symmetrical or not
-          revC = TRUE)
-dev.off()
-
+cor_mat <- cor(condition_cols)
 
 # max correlation aside from 1
 max(cor(condition_cols)[cor(condition_cols) != 1])
 
 
 
+# alternative
+
+cor_df <- as.data.frame(cor_mat)
+
+# make the rownames a column
+cor_df$cond_a <- rownames(cor_df)
+
+# pivot longer
+cor_df_long <- pivot_longer(cor_df,
+                            cols = all_of(cond_name),
+                            names_to = "cond_b",
+                            values_to = "pcorr")
+
+# # only get triangle
+# # something is going wrong here! hard to read anyways
+# cor_df_long <- cor_df_long %>%
+#   filter(cond_a >= cond_b)
+
+# make sure the two condition columns are factors with the same levels!
+cor_df_long$cond_a <- factor(cor_df_long$cond_a,
+                             levels = rev(cond_name))
+cor_df_long$cond_b <- factor(cor_df_long$cond_b,
+                             levels = rev(cond_name))
+
+# plot
+pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 6, height = 6)
+cor_df_long %>%
+  ggplot(aes(x = cond_a, y = cond_b)) +
+  geom_tile(aes(fill = pcorr), color = "white") +
+  scale_fill_gradient(low = "white", high = "red3") +
+  labs(x = "", y = "", fill = "Pearson's correlation \ncoefficient \n") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  guides(fill = guide_colorbar(ticks.colour = NA,
+                               barheight = 13,
+                               barwidth = 1))
+dev.off()
 
