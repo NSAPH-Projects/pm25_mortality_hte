@@ -3,6 +3,8 @@
 
 library(tidyverse)
 library(ggplot2)
+library(patchwork) # plot layouts
+
 
 #----- load model results
 
@@ -112,13 +114,14 @@ saveRDS(cond_abbr_order, "data/intermediate/cond_abbr_OR_order.rds")
 #----- plot
 
 pdf("results/figures/subpop_effects.pdf", width = 7, height = 6)
-pm25_df |>
+p_left <- pm25_df |>
+  filter(cond_abbr != "fullpop") |> # remove full population
   mutate(special = ifelse(cond_abbr %in% c("nohosp", "fullpop"), TRUE, FALSE)) |>
   ggplot(aes(x = OR, y = cond_name_prev, col = special)) +
   geom_point() +
   geom_errorbar(aes(xmin = low, xmax = high), width = 0) +
   geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
+  labs(x = expression("OR (95% CI) for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
        y = "") +
   scale_color_manual(values = c(`TRUE` = "salmon", `FALSE` = "black")) +
   geom_text(aes(x = 0.999, y = cond_name_prev, label = sig)) +
@@ -127,4 +130,58 @@ pm25_df |>
         axis.line.y = element_blank(),
         axis.ticks.y = element_blank(),
         panel.grid.major.y = element_line())
+p_left
 dev.off()
+
+
+
+#########################################
+
+# table with the same results
+
+pm25_df <- pm25_df %>%
+  mutate(or_ci = paste0(
+    formatC(round(OR, 3), format = "f", digits = 3), 
+    " (", 
+    formatC(round(low, 3), format = "f", digits = 3), 
+    ", ", 
+    formatC(round(high, 3), format = "f", digits = 3), 
+    ")"
+  ))
+
+or_ci_df <- pm25_df %>%
+  arrange(OR) %>%
+  select(cond_name, or_ci)
+
+
+# set levels so it will be in the same order as the data
+or_ci_df$cond_name <- factor(or_ci_df$cond_name,
+                             levels = or_ci_df$cond_name)
+
+names(or_ci_df) <- c("Condition", "OR (95% CI)")
+
+# plot the table as text
+p_right <- or_ci_df %>% 
+  ggplot() +
+  geom_text(aes(x = 0, y = Condition, label = `OR (95% CI)`)) +
+  labs(y = "") +
+  xlim(-0.01, 0.01) +
+  theme_void()
+
+# layout for two plots
+layout <- c(
+  # left plot, starts at the top of the page (0) and goes 30 units down and 3 units to the right
+  area(t = 0, l = 0, b = 30, r = 10),
+  # right most plot starts at top of page, begins where middle plot ends (l=9, and middle plot is r=9), 
+  # goes to bottom of page (b=30), and extends two units wide (r=11)
+  area(t = 0, l = 11, b = 30, r = 13) 
+)
+
+# lay out plots with patchwork
+p_both <- p_left + p_right + plot_layout(design = layout)
+
+# save figure
+pdf("results/figures/subpop_effects_text.pdf", width = 10, height = 6)
+p_both
+dev.off()
+
