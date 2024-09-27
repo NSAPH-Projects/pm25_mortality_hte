@@ -145,9 +145,6 @@ cor_mat <- cor(condition_cols)
 max(cor(condition_cols)[cor(condition_cols) != 1])
 
 
-
-# alternative
-
 cor_df <- as.data.frame(cor_mat)
 
 # make the rownames a column
@@ -171,7 +168,7 @@ cor_df_long$cond_b <- factor(cor_df_long$cond_b,
                              levels = rev(cond_name))
 
 # plot
-pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 6, height = 6)
+pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 10, height = 8)
 cor_df_long %>%
   ggplot(aes(x = cond_a, y = cond_b)) +
   geom_tile(aes(fill = pcorr), color = "white") +
@@ -184,4 +181,13 @@ cor_df_long %>%
                                barheight = 13,
                                barwidth = 1))
 dev.off()
+
+
+
+#################################
+
+# plot pm2.5 density by chronic condition
+# a little tricky because they aren't mutually exclusive
+
+
 
