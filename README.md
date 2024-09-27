@@ -1,1 +1,1 @@
-Data-driven identification of risk factors for mortality from long-term exposure to fine particulate matter among Medicare recipients
+Chronic exposure to PM$_{2.5}$ and all-cause mortality: effect modification by previous hospitalizations
