@@ -11,13 +11,14 @@ library(stringr)
 library(table1)
 library(magrittr)
 library(arrow)
-library(proxy) # for heat map
+library(patchwork)
+library(xtable)
 
-# # Load data
-# dt <- readRDS("data/intermediate/rolling_cohort.rds")
+# Load data
+dt <- readRDS("data/intermediate/rolling_cohort.rds")
 
-# SAMPLE FOR NOW
-load("data/intermediate/rolling_cohort_1000.RData")
+# # SAMPLE FOR NOW
+# load("data/intermediate/rolling_cohort_1000.RData")
 
 # path to save figures
 fig_path <- "results/figures/"
@@ -48,8 +49,10 @@ conditions <- data.frame("cond_abbr" = cond_abbr, "cond_name" = cond_name)
 
 #################################
 
-# How common is each chronic condition before exposure in 2010?
-prev_overall <- dt[year == 2010, lapply(.SD, function(x) sum(x) / .N * 100),
+# what % of observations are in each subgroup?
+prev_overall <- dt[#year == 2010
+                    , 
+                   lapply(.SD, function(x) sum(x) / .N * 100),
                    .SDcols = cond_abbr] |>
   gather(key = "cond_abbr", value = "prev_overall") |>
   left_join(conditions, by = "cond_abbr")
@@ -65,8 +68,7 @@ prev_overall$cond_name_prev <- factor(prev_overall$cond_name_prev,
                                  levels = prev_overall$cond_name_prev[order(prev_overall$prev_overall)])
 
 # plot
-pdf(paste0(fig_path, "ccw_prevalence.pdf"), width = 5, height = 5)
-prev_overall |>
+p_left <- prev_overall |>
   arrange(prev_overall) |>
   ggplot(aes(x = prev_overall, y = cond_name_prev)) +
   xlim(c(0, 40)) +
@@ -78,7 +80,118 @@ prev_overall |>
   theme_minimal() +
   theme(plot.background = element_rect(fill = "white", color = NA),
         text = element_text(family = "Helvetica"))
+
+pdf(paste0(fig_path, "ccw_prevalence.pdf"), width = 5, height = 5)
+p_left
 dev.off()
+
+
+
+#################################
+
+# get number of people and number of observations for each subgroup
+
+# summarize data for each indicator column
+subgroup_n <- rbindlist(lapply(cond_abbr, function(col) {
+  res <- dt[get(col) == 1, .(
+    num_rows = .N,                   
+    num_indiv = uniqueN(qid),
+    pm25_mean = mean(pm25) |> round(1),
+    pm25_sd = sd(pm25) |> round(1),
+    death_rate = 100*mean(dead_lead) |> round(3)
+  )]
+  res[, cond_abbr := col]
+}))
+
+# clean up data for table
+subgroup_n <- subgroup_n %>%
+  left_join(conditions, by = "cond_abbr") %>%
+  arrange(desc(num_rows)) %>%
+  select(all_of(c("cond_name", "num_rows", "num_indiv", "pm25_mean", "pm25_sd", "death_rate")))
+
+# new column that = 1 for individuals with no previous hosp (all other indicators = 0)
+dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = cond_abbr]
+
+nohosp_row <- data.frame(cond_name = "None",
+                         num_rows = dt[nohosp == 1, .N],
+                         num_indiv = dt[nohosp == 1, length(unique(qid))],
+                         pm25_mean = dt[nohosp == 1, mean(pm25)] |> round(1),
+                         pm25_sd = dt[nohosp == 1, sd(pm25)] |> round(1),
+                         death_rate = dt[nohosp == 1, 100*mean(dead_lead)] |> round(2))
+
+subgroup_n <- rbind(subgroup_n, nohosp_row)
+
+subgroup_n <- subgroup_n %>%
+  mutate(pm25_mean_sd = paste0(pm25_mean, " (", pm25_sd, ")"),
+         num_rows = format(num_rows, big.mark = ",", trim = TRUE),
+         num_indiv = format(num_indiv, big.mark = ",", trim = TRUE)) %>%
+  select(cond_name, num_rows, num_indiv, pm25_mean_sd, death_rate) %>%
+  rename(Subgroup = cond_name,
+         obs = num_rows,
+         indiv = num_indiv,
+         pm25 = pm25_mean_sd,
+         death = death_rate)
+
+# print in latex
+print(xtable(subgroup_n,
+             type = "latex",
+             label = "tab:subgroup_n",
+             caption = "The number of observations (two-year rolling windows) and the number
+             of unique beneficiaries in each subgroup."),
+      #file = "results/tables/subgroup_n.tex",
+      file = "results/tables/subgroup_n_plus.tex",
+      sanitize.text.function = identity,
+      include.rownames = FALSE)
+
+
+### attempt at creating patchwork with plot
+
+# # plot the table as text
+# p_middle <- subgroup_n %>%
+#   ggplot() +
+#   geom_text(aes(x = 0, y = cond_name_prev, label = num_rows)) +
+#   labs(y = "") +
+#   xlim(-0.01, 0.01) +
+#   theme_void() +
+#   scale_y_discrete(limits = subgroup_n$cond_name_prev)
+# 
+# # plot the table as text
+# p_right <- subgroup_n %>%
+#   ggplot() +
+#   geom_text(aes(x = 0, y = cond_name_prev, label = num_indiv)) +
+#   labs(y = "") +
+#   xlim(-0.01, 0.01) +
+#   theme_void() +
+#   scale_y_discrete(limits = subgroup_n$cond_name_prev)
+# 
+# header_middle <- ggplot() +
+#   geom_text(aes(x = 0, y = 1, label = "# of obs.")) +
+#   theme_void() +
+#   xlim(-0.01, 0.01)
+# 
+# header_right <- ggplot() +
+#   geom_text(aes(x = 0, y = 1, label = "# indiv.")) +
+#   theme_void() +
+#   xlim(-0.01, 0.01)
+# 
+# # Create an empty header for the left plot (spacer)
+# header_left <- ggplot() +
+#   geom_blank() +  # Creates an empty header
+#   theme_void()
+# 
+# # Combine headers with their corresponding plots
+# p_left_combined <- header_left / p_left + plot_layout(heights = c(0.1, 1))
+# p_middle_combined <- header_middle / p_middle + plot_layout(heights = c(0.1, 1))
+# p_right_combined <- header_right / p_right + plot_layout(heights = c(0.1, 1))
+# 
+# # Combine everything horizontally: left plot with space, middle, and right columns
+# final_plot <- p_left_combined | p_middle_combined | p_right_combined
+# 
+# # save figure
+# pdf("results/figures/ccw_prevalence_text.pdf", width = 10, height = 6)
+# final_plot
+# dev.off()
+
 
 
 #################################
@@ -96,7 +209,7 @@ prev_year <- dt[, lapply(.SD, function(x) sum(x) / .N * 100),
                    .SDcols = cond_abbr, by = year]
 
 prev_year <- pivot_longer(prev_year,
-                     cols = cond_abbr,
+                     cols = all_of(cond_abbr),
                names_to = "cond_abbr",
                values_to = "prevalence") |>
   left_join(conditions, by = "cond_abbr")
@@ -132,17 +245,32 @@ prev_year |>
 
 # 27 chronic conditions
 condition_cols <- dt %>%
-  filter(year == "2010") %>%
-  #select(names(dt)[grep("^((?!pm25).)*_ever$", names(dt), perl = TRUE)])
   select(names(dt)[grep("_ever", names(dt))])
+
 #colnames(condition_cols) <- sub("_ever$", "", colnames(condition_cols))
-colnames(condition_cols) <- cond_name # only works if dfs are in the same order
+#colnames(condition_cols) <- cond_name # only works if dfs are in the same order
 
 # Pearson's correlation (works for binary data)
 cor_mat <- cor(condition_cols)
 
-# max correlation aside from 1
-max(cor(condition_cols)[cor(condition_cols) != 1])
+# min/max correlation (aside from 1)
+max(cor_mat[cor_mat != 1])
+min(cor_mat)
+
+# DOESN'T WORK (just max and min is fine)
+# # which are the min and max?
+# max_index <- arrayInd(which.max(cor_mat[cor_mat != 1]), dim(cor_mat))
+# min_index <- arrayInd(which.min(cor_mat), dim(cor_mat))
+# 
+# # Get the row and column indices for the largest element
+# row_col_indices <- arrayInd(max_index, dim(cor_mat))
+# 
+# # Extract the row and column names
+# row_name <- rownames(cor_mat)[row_col_indices[1]]
+# col_name <- colnames(cor_mat)[row_col_indices[2]]
+
+paste0("Correlation column means:")
+colMeans(cor_mat)
 
 
 cor_df <- as.data.frame(cor_mat)
@@ -152,9 +280,16 @@ cor_df$cond_a <- rownames(cor_df)
 
 # pivot longer
 cor_df_long <- pivot_longer(cor_df,
-                            cols = all_of(cond_name),
+                            cols = all_of(cond_abbr),
                             names_to = "cond_b",
                             values_to = "pcorr")
+
+# join with condition names
+cor_df_long <- cor_df_long %>%
+  left_join(conditions, by = c("cond_a" = "cond_abbr")) %>%
+  rename(c(cond_name_a = cond_name)) %>%
+  left_join(conditions, by = c("cond_b" = "cond_abbr")) %>%
+  rename(c(cond_name_b = cond_name))
 
 # # only get triangle
 # # something is going wrong here! hard to read anyways
@@ -162,15 +297,15 @@ cor_df_long <- pivot_longer(cor_df,
 #   filter(cond_a >= cond_b)
 
 # make sure the two condition columns are factors with the same levels!
-cor_df_long$cond_a <- factor(cor_df_long$cond_a,
+cor_df_long$cond_name_a <- factor(cor_df_long$cond_name_a,
                              levels = rev(cond_name))
-cor_df_long$cond_b <- factor(cor_df_long$cond_b,
+cor_df_long$cond_name_b <- factor(cor_df_long$cond_name_b,
                              levels = rev(cond_name))
 
 # plot
-pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 10, height = 8)
+pdf(paste0(fig_path, "ccw_heatmap.pdf"), width = 10, height = 7.5)
 cor_df_long %>%
-  ggplot(aes(x = cond_a, y = cond_b)) +
+  ggplot(aes(x = cond_name_a, y = cond_name_b)) +
   geom_tile(aes(fill = pcorr), color = "white") +
   scale_fill_gradient(low = "white", high = "red3") +
   labs(x = "", y = "", fill = "Pearson's correlation \ncoefficient \n") +
@@ -181,13 +316,5 @@ cor_df_long %>%
                                barheight = 13,
                                barwidth = 1))
 dev.off()
-
-
-
-#################################
-
-# plot pm2.5 density by chronic condition
-# a little tricky because they aren't mutually exclusive
-
 
 
