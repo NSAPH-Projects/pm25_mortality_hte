@@ -9,7 +9,7 @@ library(patchwork) # plot layouts
 #----- load model results
 
 # path to results
-path_res <- "results/subpop/unstratified/"
+path_res <- "results/models/unstratified/"
 
 # get all file names in directory
 file_names <- list.files(path_res)
@@ -113,9 +113,9 @@ saveRDS(cond_abbr_order, "data/intermediate/cond_abbr_OR_order.rds")
 
 #----- plot
 
-pdf("results/figures/subpop_effects.pdf", width = 7, height = 6)
+pdf("results/figures/subpop_effects.pdf", width = 9, height = 6)
 p_left <- pm25_df |>
-  filter(cond_abbr != "fullpop") |> # remove full population
+  filter(cond_abbr != "nohosp") |> # remove no previous hosp (biased)
   mutate(special = ifelse(cond_abbr %in% c("nohosp", "fullpop"), TRUE, FALSE)) |>
   ggplot(aes(x = OR, y = cond_name_prev, col = special)) +
   geom_point() +
@@ -124,7 +124,7 @@ p_left <- pm25_df |>
   labs(x = expression("OR (95% CI) for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
        y = "") +
   scale_color_manual(values = c(`TRUE` = "salmon", `FALSE` = "black")) +
-  geom_text(aes(x = 0.999, y = cond_name_prev, label = sig)) +
+  # geom_text(aes(x = 0.999, y = cond_name_prev, label = sig)) +
   theme_classic(base_size = 12) +
   theme(legend.position = "none",
         axis.line.y = element_blank(),
@@ -139,13 +139,15 @@ dev.off()
 
 # table with the same results
 
+n_digits <- 4
+
 pm25_df <- pm25_df %>%
   mutate(or_ci = paste0(
-    formatC(round(OR, 3), format = "f", digits = 3), 
+    formatC(round(OR, n_digits), format = "f", digits = n_digits), 
     " (", 
-    formatC(round(low, 3), format = "f", digits = 3), 
+    formatC(round(low, n_digits), format = "f", digits = n_digits), 
     ", ", 
-    formatC(round(high, 3), format = "f", digits = 3), 
+    formatC(round(high, n_digits), format = "f", digits = n_digits), 
     ")"
   ))
 
@@ -184,4 +186,35 @@ p_both <- p_left + p_right + plot_layout(design = layout)
 pdf("results/figures/subpop_effects_text.pdf", width = 10, height = 6)
 p_both
 dev.off()
+
+
+#########################################
+
+# save latex table with OR (CI) and p-values
+
+main_res_df <- pm25_df %>%
+  filter(cond_abbr != "nohosp") %>%
+  arrange(desc(OR)) %>%
+  select(cond_name, or_ci, pval, pval_adj) %>%
+  mutate(pval = ifelse(pval < 0.0001,
+                       "\\textless 0.0001",
+                       format(round(pval, digits = 4), digits = 4)),
+         pval_adj = ifelse(pval_adj < 0.0001,
+                       "\\textless 0.0001",
+                       format(round(pval_adj, digits = 4), digits = 4))) %>%
+  rename(Subgroup = cond_name,
+         `Odds ratio (95\\% CI)` = or_ci,
+         `P-value` = pval,
+         `Adjusted p-value` = pval_adj)
+
+# print in latex
+print(xtable(main_res_df,
+             type = "latex",
+             label = "tab:subpop_effects",
+             caption = "Odds ratios (95\\% confidence intervals), p-values, and Benjamini–Yekutieli
+             adjusted p-values for mortality associated with a 1 \\(\\mu g/m^3\\) increase in 
+             PM\\(_{2.5}\\) for individuals in each subgroup."),
+      file = "results/tables/subpop_effects.tex", 
+      sanitize.text.function = identity,
+      include.rownames = FALSE)
 
