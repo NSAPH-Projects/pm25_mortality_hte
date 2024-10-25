@@ -6,17 +6,13 @@
 library(tidyverse)
 library(ggplot2)
 library(xtable)
-
-# path to save figures
-fig_path <- "results/figures/"
-
-# haven't saved any figures yet
+library(cowplot)
 
 
 #----- load model results
 
 # path to results
-path_res <- "results/subpop/stratified/"
+path_res <- "results/models/stratified/"
 
 # get all file names in directory
 file_names <- list.files(path_res)
@@ -127,12 +123,12 @@ pm25_df <- pm25_df %>%
     strat_var == "sex" & strat == 1 ~ "Male",
     strat_var == "sex" & strat == 0 ~ "Female",
     
-    strat_var == "race" & strat == 1 ~ "white",
-    strat_var == "race" & strat == 2 ~ "black",
-    strat_var == "race" & strat == 3 ~ "other",
-    strat_var == "race" & strat == 4 ~ "asian",
-    strat_var == "race" & strat == 5 ~ "hispanic",
-    strat_var == "race" & strat == 6 ~ "native",
+    strat_var == "race" & strat == 1 ~ "White",
+    strat_var == "race" & strat == 2 ~ "Black",
+    strat_var == "race" & strat == 3 ~ "Other",
+    strat_var == "race" & strat == 4 ~ "Asian",
+    strat_var == "race" & strat == 5 ~ "Hispanic",
+    strat_var == "race" & strat == 6 ~ "Native",
     
     strat_var == "dual" & strat == 1 ~ "Medicaid eligible",
     strat_var == "dual" & strat == 0 ~ "Medicaid ineligible",
@@ -140,31 +136,23 @@ pm25_df <- pm25_df %>%
     strat_var == "old" & strat == 1 ~ "Above median age",
     strat_var == "old" & strat == 0 ~ "Below median age",
     
-    strat_var == "urban" & strat == 1 ~ "above median popdensity",
-    strat_var == "urban" & strat == 0 ~ "below median popdensity",
+    strat_var == "urban" & strat == TRUE ~ "Urban",
+    strat_var == "urban" & strat == FALSE ~ "Rural",
     
     TRUE ~ strat
   ))
 
+# set factor to choose order of strata in plotting (legend right to left)
+# order only matters within a stratum
+pm25_df$strat <- factor(pm25_df$strat,
+                       levels = c("Black", "White", "Hispanic", "Asian", "Other", "Native",
+                                  "Female", "Male",
+                                  "Midwest", "South", "Northeast", "West",
+                                  "Medicaid eligible", "Medicaid ineligible",
+                                  "Rural", "Urban"))
 
-# commenting out for now so I don't have to fill these in with the new variables yet
-# # set factor to choose order of strata in plotting
-# # order only matters within a stratum
-# pm25_df$strat <- factor(pm25_df$strat,
-#                        levels = c("Non-Hispanic white", "Non-white", 
-#                                   "Female", "Male",
-#                                   "Midwest", "South", "Northeast", "West"))
-
-# plot in same order used for overall OR 
+# plot conditions in same order used for overall OR 
 cond_abbr_order <- readRDS("data/intermediate/cond_abbr_OR_order.rds")
-
-# # sort by OR
-# pm25_df <- pm25_df %>%
-#   arrange(cond_abbr_order)
-# 
-# pm25_df <- pm25_df %>% filter(race == "Non-Hispanic white")
-# pm25_df$cond_name <- factor(pm25_df$cond_name, 
-#                             levels = pm25_df$cond_name[order(cond_abbr_order)])
 
 pm25_df$cond_abbr <- factor(pm25_df$cond_abbr, 
                             levels = cond_abbr_order)
@@ -176,35 +164,31 @@ pm25_df$cond_name <- factor(pm25_df$cond_name,
 
 ############################################## 
 
-# remove full population
+# remove nohosp
 pm25_df <- pm25_df %>%
-  filter(cond_abbr != "fullpop")
+  filter(cond_abbr != "nohosp")
 
 
-
-#----- plot for race_white
-
-plot_race_white <- pm25_df |>
-  filter(strat_var == "race_white") %>%
-  ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.4)) +
+# get elements of all plots
+gg_strat <- list(
+  geom_point(position = position_dodge(width = 0.4)),
   geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
+                width = 0, position = position_dodge(width = 0.4)),
+  # geom_text(aes(x = 0.99, y = cond_name, label = sig),
+  #           position = position_dodge(width = 0.5),
+  #           show.legend = FALSE),
+  geom_vline(xintercept = 1, lty = 2, col = "gray50"),
   labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
        y = "",
-       col = "") +
-  scale_color_manual(values = c(`Non-Hispanic white` = "skyblue3", `Non-white` = "orange2")) +
-  geom_text(aes(x = 0.99, y = cond_name, label = sig),
-            position = position_dodge(width = 0.5),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
+       col = ""), 
+  theme_classic(base_size = 12),
   theme(legend.position = "bottom",
         axis.line.y = element_blank(),
         axis.ticks.y = element_blank(),
         panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12)),
   guides(color = guide_legend(reverse = TRUE))
+)
 
 
 #----- plot for sex
@@ -214,24 +198,8 @@ plot_sex <- pm25_df |>
   # remove sex-specific conditions
   filter(!cond_abbr %in% c("prostateCancer", "hyperp", "endometrialCancer", "breastCancer")) %>%
   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
-  scale_color_manual(values = c(`Male` = "#6CAE75", `Female` = "#6F40A8")) +
-  geom_text(aes(x = 0.998, y = cond_name, label = sig),
-            position = position_dodge(width = 0.5),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
+  scale_color_manual(values = c(`Female` = "#6F40A8", `Male` = "#6CAE75")) +
+  gg_strat
 
 
 #----- plot for census region
@@ -239,78 +207,35 @@ plot_sex <- pm25_df |>
 plot_census_region <- pm25_df |>
   filter(strat_var == "census_region") %>%
   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.7)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.7)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
   scale_color_manual(values = c("Midwest" = "#414A90", 
-                                "Northeast" = "#3FAFD4",
-                                "South" = "#3DB71B", 
-                                "West" = "#C9D337")) +
-  geom_text(aes(x = 0.987, y = cond_name, label = sig),
-            position = position_dodge(width = 0.8),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
+                                "South" = "#69c0dd",
+                                "Northeast" = "#36a118", 
+                                "West" = "#d8c94c")) +
+  gg_strat
 
 
 #----- plot for race (4 groups)
 
 plot_race <- pm25_df |>
   filter(strat_var == "race",
-         !strat %in% c("native", "other")) %>%
+         !strat %in% c("Native", "Other")) %>%
   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.7)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.7)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
-  #scale_color_manual(values = c(`Non-Hispanic white` = "skyblue3", `Non-white` = "orange2")) +
-  geom_text(aes(x = 0.95, y = cond_name, label = sig),
-            position = position_dodge(width = 0.6),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
+  scale_color_manual(values = c(`White` = "#eec200",
+                                `Black` = "#0b6d5b",
+                                `Hispanic` = "#4dbdbf",
+                                `Asian` = "#dd5e09")) +
+  gg_strat
 
 
 #----- plot for age
 
-plot_old <- pm25_df |>
-  filter(strat_var == "old") %>%
-  ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
-  #scale_color_manual(values = c(`Non-Hispanic white` = "skyblue3", `Non-white` = "orange2")) +
-  geom_text(aes(x = 0.995, y = cond_name, label = sig),
-            position = position_dodge(width = 0.5),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
+# may not be valid since this is discrete time format
+# individuals age into the older stratum
+
+# plot_old <- pm25_df |>
+#   filter(strat_var == "old") %>%
+#   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
+#   gg_strat
 
 
 #----- plot for dual
@@ -318,24 +243,9 @@ plot_old <- pm25_df |>
 plot_dual <- pm25_df |>
   filter(strat_var == "dual") %>%
   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
-  #scale_color_manual(values = c(`Non-Hispanic white` = "skyblue3", `Non-white` = "orange2")) +
-  geom_text(aes(x = 0.995, y = cond_name, label = sig),
-            position = position_dodge(width = 0.5),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
+  scale_color_manual(values = c(`Medicaid eligible` = "orange2",
+                                `Medicaid ineligible` = "skyblue3")) +
+  gg_strat
 
 
 #----- plot for urban
@@ -343,25 +253,9 @@ plot_dual <- pm25_df |>
 plot_urban <- pm25_df |>
   filter(strat_var == "urban") %>%
   ggplot(aes(x = OR, y = cond_name, group = strat, col = strat)) +
-  geom_point(position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(xmin = low, xmax = high), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_vline(xintercept = 1, lty = 2, col = "gray50") +
-  labs(x = expression("OR (95% CI) for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
-       y = "",
-       col = "") +
-  #scale_color_manual(values = c(`Non-Hispanic white` = "skyblue3", `Non-white` = "orange2")) +
-  geom_text(aes(x = 0.995, y = cond_name, label = sig),
-            position = position_dodge(width = 0.5),
-            show.legend = FALSE) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "bottom",
-        axis.line.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major.y = element_line(),
-        legend.text = element_text(size = 12)) +
-  guides(color = guide_legend(reverse = TRUE))
-
+  scale_color_manual(values = c(Urban = "gray40", 
+                                Rural = "#00cc00")) +
+  gg_strat
 
 
 
@@ -369,7 +263,7 @@ plot_urban <- pm25_df |>
 
 # combine all of these into one plot
 
-# can do facet_wrap but I don't want them all in one legend
+# could do facet_wrap but I don't want them all in one legend
 
 # pm25_df |>
 #   filter(strat_var != "race_white") |>
@@ -395,15 +289,13 @@ plot_urban <- pm25_df |>
 #   guides(color = guide_legend(reverse = TRUE))
 
 
-library(cowplot)
-
-all_plots <- align_plots(plot_old, plot_sex, plot_race, 
-                         plot_dual, plot_census_region, plot_urban,
+all_plots <- align_plots(plot_sex, plot_race, plot_dual, 
+                         plot_census_region, plot_urban,
                          align = "hv")
 
 pdf("results/figures/six_plots_stratified.pdf", height = 15, width = 13)
 plot_grid(all_plots[[1]], all_plots[[2]], all_plots[[3]], 
-          all_plots[[4]], all_plots[[5]], all_plots[[6]],
+          all_plots[[4]], all_plots[[5]],
           ncol = 2)
 dev.off()
 
@@ -416,14 +308,16 @@ dev.off()
 # the column "names" can be 
 # 27 rows (+nohosp) for each disease
 
+n_digits <- 4
+
 # new column with proper formatting
 pm25_df <- pm25_df %>%
   mutate(or_ci = paste0(
-    formatC(round(OR, 3), format = "f", digits = 3), 
+    formatC(round(OR, n_digits), format = "f", digits = n_digits), 
     " (", 
-    formatC(round(low, 3), format = "f", digits = 3), 
+    formatC(round(low, n_digits), format = "f", digits = n_digits), 
     ", ", 
-    formatC(round(high, 3), format = "f", digits = 3), 
+    formatC(round(high, n_digits), format = "f", digits = n_digits), 
     ")"
   ))
 
@@ -440,15 +334,44 @@ or_tab <- or_tab %>%
   pivot_wider(names_from = strat_var_x_strat,
               values_from = or_ci)
 
+# same order as other tables (by OR)
+or_tab <- or_tab %>%
+  arrange(match(cond_name, rev(levels(or_tab$cond_name))))
+
+# split up this table into multiple!!
 # print in latex
-print(xtable(or_tab,
+print(xtable(or_tab |> select(cond_name, 
+                              names(or_tab)[str_detect(names(or_tab), "sex|dual")]),
              type = "latex",
              label = "tab:stratified_OR_table",
-             # caption = "Odds ratios (95\\% confidence intervals) for mortality associated 
-             # with a 1 \\(\mu g/m^3\\) increase in PM\\(_{2.5}\\) from the stratified models."
-             caption = "Messy placeholder table. Has 28 rows and 21 columns."
-             ),
-      file = "results/tables/stratified_OR_table.tex", 
+             caption = "sex and dual results"),
+      file = "results/tables/stratified_OR_table_sex_dual.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
 
+print(xtable(or_tab |> select(cond_name, 
+                              race_x_White, race_x_Black, race_x_Hispanic, race_x_Asian),
+             type = "latex",
+             label = "tab:stratified_OR_table",
+             caption = "race results"),
+      file = "results/tables/stratified_OR_table_race.tex", 
+      sanitize.text.function = identity,
+      include.rownames = FALSE)
+
+print(xtable(or_tab |> select(cond_name, 
+                              names(or_tab)[str_detect(names(or_tab), "census_region")]),
+             type = "latex",
+             label = "tab:stratified_OR_table_census_region",
+             caption = "census region results"),
+      file = "results/tables/stratified_OR_table_census_region.tex", 
+      sanitize.text.function = identity,
+      include.rownames = FALSE)
+
+print(xtable(or_tab |> select(cond_name, 
+                              names(or_tab)[str_detect(names(or_tab), "urban")]),
+             type = "latex",
+             label = "tab:stratified_OR_table_urban",
+             caption = "urban results"),
+      file = "results/tables/stratified_OR_table_urban.tex", 
+      sanitize.text.function = identity,
+      include.rownames = FALSE)
