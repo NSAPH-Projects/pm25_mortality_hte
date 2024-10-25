@@ -85,5 +85,5 @@ summary(outcome_fit)$coefficients
 # save model coefficients
 # not using scratch space because I'm only saving coefficients
 saveRDS(summary(outcome_fit)$coefficients, 
-        file = paste0("results/subpop/unstratified/coeff_", str_remove(ccw_current, "_ever"), ".rds"))
+        file = paste0("results/models/unstratified/coeff_", str_remove(ccw_current, "_ever"), ".rds"))
 

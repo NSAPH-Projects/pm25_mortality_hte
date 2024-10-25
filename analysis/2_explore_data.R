@@ -1,6 +1,6 @@
 
 ########################################################
-### Mortality CRE project
+### Hetergeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
 ### Exploratory data analysis
 ########################################################
@@ -14,6 +14,7 @@ library(tidyr)
 library(table1)
 library(magrittr)
 library(arrow)
+library(readr)
 
 dt <- read_rds("data/intermediate/rolling_cohort.rds")
 #load("data/intermediate/rolling_cohort_1000.RData")
@@ -33,6 +34,10 @@ paste0(n_indiv, " individuals")
 # how many rows of data?
 n_rows <- nrow(dt)
 paste0(n_rows, " rows of data (exposure years)")
+
+# how many deaths?
+n_deaths <- sum(dt$dead_lead)
+paste0(n_rows, " deaths observed")
 
 # How many person-years?
 # number of rows + (2 * number of people)

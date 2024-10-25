@@ -1,49 +1,32 @@
 
 ########################################################
-### Mortality CRE project
+### Hetergeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
-### Merging dataset
+### Merge dataset
 ########################################################
 
 #---------- Data References ----------#
 
-##### ADRD hospitalization and denominator data
-# Dataset from Daniel Mork 
-# Includes:
-#  first/last years continuously in Medicare
-#  timing of first hospitalization with ADRD or censoring
-#  other info about beneficiaries (denominator)
-# See /n/dominici_nsaph_l3/Lab/projects/dmork_dataverse_adrd_first_hosp_denom/data/ 
-# files for details
-
-##### 27 chronic conditions determined by previous hospitalizations in reference period
-# See Chronic Conditions Warehouse (CCW) algorithms
-# References: https://github.com/NSAPH-Data-Processing/ccw_proxy
+# 27 chronic conditions determined by previous hospitalizations in reference period
+#  See Chronic Conditions Warehouse (CCW) algorithms
+#  References: https://github.com/NSAPH-Data-Processing/ccw_proxy
 #  https://www2.ccwdata.org/documents/10280/19139421/ccw-chronic-condition-algorithms.pdf
-#  https://www2.ccwdata.org/documents/10280/19022436/codebook-mbsf-cc.pdf
-#  https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3207195/
 
-##### ZIP confounders
-# Details: Zip code confounders generated from several data sources:
-#  * 2000 census, 
-#  * 2011-2015 american community surveys,
-#  * 1999-2012 brfss,
-#  * GridMET and Google Earth Engine
-#  Complete information on reproducing these confounder datasets is 
-#  found here: https://github.com/NSAPH/National-Causal-Analysis/tree/master/Confounders
-# References: https://doi.org/10.7910/DVN/9V5WCM
+# Area-level confounders
 #  https://github.com/NSAPH/National-Causal-Analysis/tree/master/Confounders
-#  https://www.cdc.gov/brfss/about/archived.htm
-#  https://developers.google.com/earth-engine/datasets/catalog/IDAHO_EPSCOR_GRIDMET
 
-# ZIP exposures: 
-#  PM2.5, NO2, Ozone: https://sedac.ciesin.columbia.edu/data/set/aqdh-pm2-5-o3-no2-concentrations-zipcode-contiguous-us-2000-2016
-#  GridMET Temperature/Humidity: https://rmets.onlinelibrary.wiley.com/doi/full/10.1002/joc.3413
-#  Heat index calculation: https://doi.org/10.1289/ehp.1206273 
+# PM2.5 exposure data: 
+#  https://pubmed.ncbi.nlm.nih.gov/31272018/
 
 # Denominator
-#  https://resdac.org/cms-data/files/mbsf-base
+#  includes FFS & Medicare advantage, but I restricted to FFS here (hmo = 0)
 
+# Urbanization levels
+#  NCHS Urban-Rural Classification Scheme for Counties
+#  https://www.cdc.gov/nchs/data-analysis-tools/urban-rural.html
+
+# Note: rolling windows here are referred to as three years (hosp, exposure, outcome)
+# instead of two years (exposure, outcome)
 
 #---------- Load Libraries ----------#
 
@@ -53,34 +36,27 @@ library(arrow)
 library(lubridate)
 library(tidyr)
 library(arrow)
+library(readxl)
+library(dplyr)
 
-
-### CODE BELOW COPIED FROM DANIEL MORK
-# /n/dominici_nsaph_l3/Lab/projects/dmork_dataverse_adrd_first_hosp_denom/1. Medicare FFS enrollment.R
-
-
-# ############################################################################ #
-#' Project: Medicare FFS enrollment until first ADRD hospitalization                                
-#' Code: determine FFS enrollment period for each individual
-#' Inputs: pre-processed denominator files
-#' Outputs: annual Medicare beneficiary data
-#' Author: Daniel Mork                                                  
-#' Date: 5/19/2023
-# ############################################################################ #
 
 # Setup ---------------------
 
+# snippets of code below taken from Daniel Mork
+# /n/dominici_nsaph_l3/Lab/projects/dmork_dataverse_adrd_first_hosp_denom/1. Medicare FFS enrollment.R
+
 options(stringsAsFactors = FALSE)
 
-# Read denominator files ---------------------
+# read denominator files
+# this is the full denominator (not just FFS)
 # /n/dominici_nsaph_l3/Lab/projects/analytic/
+# I need area-level confounders eventually, but this is too much data to load all at once
 f <- list.files("data/raw/denom_by_year/", pattern = "\\.fst", full.names = TRUE)
 vars <- c("qid", "year", "hmo_mo", "zip", "age", "race", "sex", "dual", "dead", "statecode"#,
           # "poverty", "popdensity", "medianhousevalue", "pct_blk", "medhouseholdincome",
           # "pct_owner_occ", "hispanic", "education", "smoke_rate", "mean_bmi",
           #"summer_tmmx", "summer_rmax", "winter_tmmx", "winter_rmax"
           )
-
 dt <- rbindlist(lapply(f[2:18], read_fst,
                        columns = vars,
                        as.data.table = TRUE))
@@ -91,15 +67,7 @@ setkey(dt, qid, year)
 
 gc()
 
-# for now, keep only a random sample with 10,000,000 individuals
-# set.seed(17)
-# ids <- sample(unique(dt[,qid]), 10000000, replace = FALSE)
-# dt <- dt[qid %in% ids,]
-# save(dt, file = "data/raw/denom_sample.Rdata")
-
-#load("data/raw/denom_sample.Rdata")
-
-# for now, require individuals to be in FFS the whole time (can change later)
+# require individuals to be in FFS the whole time
 # nrow(dt[hmo_mo != 0]) # known race and sex
 dt <- dt[hmo_mo == 0 & # retain FFS only (zero HMO months)
            race != 0 & sex != 0] # known race and sex
@@ -144,12 +112,6 @@ dt <- dt[, prev_year := NULL]
 dt[, age := first(age) + year - first(year), by = qid]
 
 
-##################################################################################
-##################################################################################
-##################################################################################
-
-
-
 #---------- Death (Outcome) and Denominator ----------#
 
 # Make a new variable for year of death
@@ -167,7 +129,7 @@ dt <- dt[age <= 100]
 dt[, age_grp := cut(age, breaks = c(64, 74, 84, Inf))]
 
 # Merge RTI race code ---------------------
-# we could still do this only in years for which its available (could ask group about this)
+# we could still do this only in years for which its available
 
 # # available 2009-2014 and 2016 in current data
 # rti <- rbindlist(lapply(c(2010), function(y) {
@@ -220,10 +182,6 @@ for (i in 1:length(hosp_years)) {
   gc()
   setDT(one_year)
   gc()
-  
-  # # restrict to individuals in my random sample
-  # one_year <- one_year[bene_id %in% ids,]
-  # gc()
   
   # save into list
   prev_hosp <- rbindlist(list(prev_hosp, one_year), fill = TRUE)
@@ -286,6 +244,9 @@ gc()
 
 
 #---------- Merge Hospitalizations with ZIP Confounders ----------#
+
+# make sure zip is integer 
+all_hosp[, zip := as.integer(zip)]
 
 # Merge hospitalizations with ZIP confounders
 dt <- merge(all_hosp, zip_yr_df, by = c("zip", "year"), all.x = TRUE)
@@ -421,6 +382,48 @@ dt[, n_windows := .N, by = qid]
 dt[, year_follow := year - first_year_ffs]
 
 
+#---------- Urban/rural indicator ----------#
+
+#----- get urban/rural indicator
+
+ur <- read_excel("data/raw/urban_rural/NCHSURCodes2013.xlsx")
+
+# columns of interest
+ur <- ur %>%
+  select(c("FIPS code", "2013 code")) %>%
+  rename(county = `FIPS code`, 
+         ur_class = `2013 code`)
+
+# get binary classification
+ur <- ur %>%
+  mutate(urban = ifelse(ur_class %in% c(1,2,3), TRUE, FALSE))
+
+
+
+##### I don't think I need this. dataset already has county variable
+# #----- get counties in dataset
+# 
+# # load zip to county crosswalk
+# zip2county <- read.csv("/n/dominici_lab/lab/data/exposures/exposure/zip2county_master_xwalk/zip2county_master_xwalk_2010_2023_tot_ratio_one2one.csv")
+# 
+# # get columns of interest
+# zip2county <-zip2county |>
+#   filter(year == "2015") |>
+#   select(zip, county)
+# 
+# # make sure zip is integer for both 
+# zip2county$zip <- as.integer(zip2county$zip)
+# dt[, zip := as.integer(zip)]
+# 
+# # merge with dt
+# dt <- merge(dt, zip2county, by = "zip", all.x = TRUE)
+
+
+#----- merge dataset with urban/rural indicators
+
+dt <- merge(dt, ur, by = "county", all.x = TRUE)
+
+
 #---------- Missing Data ----------#
 
 # Check all columns except those with _ever (NA means never hospitalized)
@@ -445,5 +448,10 @@ dt <- dt[complete.cases(dt[, ..cols_to_check])]
 # setorder(dt, cols = census_region)
 
 # Save
-saveRDS(dt, file = "data/intermediate/rolling_cohort.rds")
+saveRDS(dt, file = "data/intermediate/rolling_cohort_NEW.rds")
+
+# also save a small sample of data
+id_mini <- sample(dt[,qid], 1000, replace = FALSE)
+dt_mini <- dt[qid %in% id_mini,]
+saveRDS(dt_mini, file = "data/intermediate/rolling_cohort_1000_NEW.rds")
 
