@@ -2,7 +2,7 @@
 ########################################################
 ### Hetergeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
-### Discrete time logistic regression
+### Discrete time logistic regression, stratified
 ########################################################
 
 library(data.table)
@@ -55,11 +55,11 @@ if(stratify_by == "old"){
   dt[, old := as.integer(age > median_age)]
 }
 
-# above/below median age
-if(stratify_by == "urban"){
-  median_popdens <- dt[, median(popdensity)]
-  dt[, urban := as.integer(popdensity > median_popdens)]
-}
+# # above/below median urbanicity
+# if(stratify_by == "urban"){
+#   median_popdens <- dt[, median(popdensity)]
+#   dt[, urban := as.integer(popdensity > median_popdens)]
+# }
 
 #######################################################################
 
@@ -141,7 +141,7 @@ for(i in 1:length(strata)){
   # save model coefficients
   # not using scratch space because I'm only saving coefficients
   saveRDS(summary(outcome_fit)$coefficients, 
-          file = paste0("results/subpop/stratified/coeff_", str_remove(ccw_current, "_ever"), 
+          file = paste0("results/models/stratified/coeff_", str_remove(ccw_current, "_ever"), 
                         "_", "strat_", stratify_by, "_", stratum, ".rds"))
   
   rm(outcome_fit); gc()
