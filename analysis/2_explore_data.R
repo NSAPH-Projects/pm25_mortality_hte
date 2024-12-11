@@ -17,7 +17,7 @@ library(arrow)
 library(readr)
 
 dt <- read_rds("data/intermediate/rolling_cohort.rds")
-#load("data/intermediate/rolling_cohort_1000.RData")
+#dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
 
 # make a new variable for race + dual
 dt[, race_dual := paste0(race, "_", dual)]
@@ -37,7 +37,7 @@ paste0(n_rows, " rows of data (exposure years)")
 
 # how many deaths?
 n_deaths <- sum(dt$dead_lead)
-paste0(n_rows, " deaths observed")
+paste0(n_deaths, " deaths observed")
 
 # How many person-years?
 # number of rows + (2 * number of people)
