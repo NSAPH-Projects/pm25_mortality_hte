@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p fasse_bigmem # partition (queue)
 #SBATCH -c 40 # number of cores
-#SBATCH --mem=300GB # memory pool for all cores
+#SBATCH --mem=480GB # memory pool for all cores
 #SBATCH -t 2:00:00 # time 
 #SBATCH -o slurm-table1-%j.out
 

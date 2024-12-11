@@ -13,9 +13,7 @@ library(dplyr)
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
-
-# # SAMPLE FOR NOW TO TEST ARRAY
-# load("data/intermediate/rolling_cohort_1000.RData")
+# dt <- ("data/intermediate/rolling_cohort_1000.rds")
 
 
 #---- prepare data
