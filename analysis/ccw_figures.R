@@ -16,9 +16,7 @@ library(xtable)
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
-
-# # SAMPLE FOR NOW
-# load("data/intermediate/rolling_cohort_1000.RData")
+# dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
 
 # path to save figures
 fig_path <- "results/figures/"
@@ -98,7 +96,7 @@ subgroup_n <- rbindlist(lapply(cond_abbr, function(col) {
     num_indiv = uniqueN(qid),
     pm25_mean = mean(pm25) |> round(1),
     pm25_sd = sd(pm25) |> round(1),
-    death_rate = 100*mean(dead_lead) |> round(3)
+    death_rate = 100*mean(dead_lead)
   )]
   res[, cond_abbr := col]
 }))
@@ -109,19 +107,30 @@ subgroup_n <- subgroup_n %>%
   arrange(desc(num_rows)) %>%
   select(all_of(c("cond_name", "num_rows", "num_indiv", "pm25_mean", "pm25_sd", "death_rate")))
 
-# new column that = 1 for individuals with no previous hosp (all other indicators = 0)
+fullpop_row <- data.frame(cond_name = "Full population",
+                          num_rows = dt[, .N],
+                          num_indiv = dt[, length(unique(qid))],
+                          pm25_mean = dt[, mean(pm25)] |> round(1),
+                          pm25_sd = dt[, sd(pm25)] |> round(1),
+                          death_rate = dt[, 100*mean(dead_lead)])
+
+# new column that = 1 for rows with no previous hosp (all other indicators = 0)
 dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = cond_abbr]
 
-nohosp_row <- data.frame(cond_name = "None",
+# new column for individuals who have nohosp == 1 for ALL observations
+dt[, all_nohosp := all(nohosp == 1), by = qid]
+
+nohosp_row <- data.frame(cond_name = "No subgroups",
                          num_rows = dt[nohosp == 1, .N],
-                         num_indiv = dt[nohosp == 1, length(unique(qid))],
+                         num_indiv = dt[all_nohosp == 1, length(unique(qid))],
                          pm25_mean = dt[nohosp == 1, mean(pm25)] |> round(1),
                          pm25_sd = dt[nohosp == 1, sd(pm25)] |> round(1),
-                         death_rate = dt[nohosp == 1, 100*mean(dead_lead)] |> round(2))
+                         death_rate = dt[nohosp == 1, 100*mean(dead_lead)])
 
-subgroup_n <- rbind(subgroup_n, nohosp_row)
+subgroup_n <- rbind(fullpop_row, nohosp_row, subgroup_n)
 
 subgroup_n <- subgroup_n %>%
+  mutate(death_rate = as.character(round(death_rate, 1))) %>%
   mutate(pm25_mean_sd = paste0(pm25_mean, " (", pm25_sd, ")"),
          num_rows = format(num_rows, big.mark = ",", trim = TRUE),
          num_indiv = format(num_indiv, big.mark = ",", trim = TRUE)) %>%
