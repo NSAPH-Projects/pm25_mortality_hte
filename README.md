@@ -1,1 +1,1 @@
-Chronic exposure to PM2.5 and all-cause mortality: effect modification by previous hospitalizations
+A medical history subgroup analysis for long-term exposure to air pollution and mortality
