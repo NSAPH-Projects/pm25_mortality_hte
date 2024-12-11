@@ -399,24 +399,22 @@ ur <- ur %>%
   mutate(urban = ifelse(ur_class %in% c(1,2,3), TRUE, FALSE))
 
 
+#----- get counties in dataset
 
-##### I don't think I need this. dataset already has county variable
-# #----- get counties in dataset
-# 
-# # load zip to county crosswalk
-# zip2county <- read.csv("/n/dominici_lab/lab/data/exposures/exposure/zip2county_master_xwalk/zip2county_master_xwalk_2010_2023_tot_ratio_one2one.csv")
-# 
-# # get columns of interest
-# zip2county <-zip2county |>
-#   filter(year == "2015") |>
-#   select(zip, county)
-# 
-# # make sure zip is integer for both 
-# zip2county$zip <- as.integer(zip2county$zip)
-# dt[, zip := as.integer(zip)]
-# 
-# # merge with dt
-# dt <- merge(dt, zip2county, by = "zip", all.x = TRUE)
+# load zip to county crosswalk
+zip2county <- read.csv("/n/dominici_lab/lab/data/exposures/exposure/zip2county_master_xwalk/zip2county_master_xwalk_2010_2023_tot_ratio_one2one.csv")
+
+# get columns of interest
+zip2county <-zip2county |>
+  filter(year == "2015") |>
+  select(zip, county)
+
+# make sure zip is integer for both
+zip2county$zip <- as.integer(zip2county$zip)
+dt[, zip := as.integer(zip)]
+
+# merge with dt
+dt <- merge(dt, zip2county, by = "zip", all.x = TRUE)
 
 
 #----- merge dataset with urban/rural indicators
@@ -441,6 +439,9 @@ nrow(dt[complete.cases(dt[, ..cols_to_check])]) / nrow(dt) # 97%
 dt <- dt[complete.cases(dt[, ..cols_to_check])]
 
 
+cat("Column names:")
+names(dt)
+
 
 #---------- Save Data ----------#
 
@@ -448,10 +449,10 @@ dt <- dt[complete.cases(dt[, ..cols_to_check])]
 # setorder(dt, cols = census_region)
 
 # Save
-saveRDS(dt, file = "data/intermediate/rolling_cohort_NEW.rds")
+saveRDS(dt, file = "data/intermediate/rolling_cohort.rds")
 
 # also save a small sample of data
 id_mini <- sample(dt[,qid], 1000, replace = FALSE)
 dt_mini <- dt[qid %in% id_mini,]
-saveRDS(dt_mini, file = "data/intermediate/rolling_cohort_1000_NEW.rds")
+saveRDS(dt_mini, file = "data/intermediate/rolling_cohort_1000.rds")
 
