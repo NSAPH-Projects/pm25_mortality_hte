@@ -14,49 +14,36 @@ library(dplyr)
 library(arrow)
 library(xtable)
 
-
-#--- user-specified
-
-# 2010 only or all person-time?
-#obs_include <- "2010_only"
-obs_include <- "all_pt"
-
 #####################################################
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
+# dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
 
-# # SAMPLE FOR NOW
-# load("data/intermediate/rolling_cohort_1000.RData")
-
-
-# take 2010 only (2010-2011 window)
-if(obs_include == "2010_only"){
-  dt <- dt[year == 2010,]
-}
-
-
-# change individual-level values
-dt[, sex := factor(sex, levels = c(1, 0), 
-                   labels = c("sub Male", "sub Female"))]
-dt[, dual := factor(dual, levels = c(0, 1), 
-                    labels = c("sub Ineligible", "sub Eligible"))]
-dt[, age_grp := factor(age_grp, levels = c("(64,74]", "(74,84]", "(84,Inf]"), 
-                       labels = c("sub 65-74", "sub 75-84", "sub 85+"))]
-dt[, race := factor(race, levels = c(1,2,5,4,6,3),
-                    labels = c("sub White", 
-                               "sub Black/African-American",
-                               "sub Hispanic", 
-                               "sub Asian/Pacific Islander",
-                               "sub American Indian/Alaska Native",
-                               "sub Other"))]
-dt[, dead_lead := factor(dead_lead, levels = c(0, 1), 
-                         labels = c("Survived", "Died"))]
-dt[, census_region := factor(census_region, levels = c("Northeast", "Midwest", "South", "West"),
-                             labels = c("sub Northeast", "sub Midwest", "sub South", "sub West"))]
-
-# make some changes to area-level variables to make the columns more interpretable
+# clean up data values
 dt[ , `:=` (
+  
+  # use "--" to indicate where to indent later
+  sex = factor(sex, levels = c(1, 0), 
+               labels = c("--Male", "--Female")),
+  dual = factor(dual, levels = c(0, 1), 
+                labels = c("--Ineligible", "--Eligible")),
+  age_grp = factor(age_grp, levels = c("(64,74]", "(74,84]", "(84,Inf]"), 
+                    labels = c("--65-74", "--75-84", "--85+")),
+  race = factor(race, levels = c(1,2,5,4,6,3),
+                 labels = c("--White", 
+                            "--Black",
+                            "--Hispanic", 
+                            "--Asian",
+                            "--Native American",
+                            "--Other")),
+  census_region = factor(census_region, levels = c("Northeast", "Midwest", "South", "West"),
+                          labels = c("--Northeast", "--Midwest", "--South", "--West")),
+  urban = factor(urban, levels = c(TRUE, FALSE),
+                  labels = c("--Urban", "--Rural")),
+  
+  # dead_lead = factor(dead_lead, levels = c(0, 1), 
+  #                    labels = c("Survived", "Died")),
   
   # multiply % by 100
   poverty = poverty * 100,
@@ -72,120 +59,121 @@ dt[ , `:=` (
   
   # divide house value and income by 10,000
   medianhousevalue = medianhousevalue / 10000,
-  medhouseholdincome = medhouseholdincome / 10000
+  medhouseholdincome = medhouseholdincome / 10000,
+  
+  # divide pop density by 1,000
+  popdensity = popdensity / 1000
   
 )]
 
 
+#---------- use table1 function ----------#
 
-### change table column names
-
-# individial-level
-dt <- dt %>%
-  setnames(old = c("age_grp", "race", "sex", "dual", "census_region"),
-           new = c("Age group", "Race", "Sex", "Medicaid eligibility", "Census region"))
-
-
-# # # ZIP-level
-# setnames(dt, "pm25", "Mean annual PM2.5 (ug/m3)")
-# setnames(dt, "poverty", "% of 65+ population below poverty line")
-# setnames(dt, "popdensity", "Pop. density per square mile")
-# setnames(dt, "medianhousevalue", "Median value of owner occupied properties")
-# setnames(dt, "medhouseholdincome", "Median household income")
-# setnames(dt, "pct_owner_occ", "% of housing units occupied by owner")
-# setnames(dt, "education", "% of 65+ population not graduating from high school")
-# setnames(dt, "pct_blk", "% of 65+ population Black") # or full population?
-# setnames(dt, "pct_hispanic", "% of 65+ population Hispanic") # or full population?
-# setnames(dt, "summer_tmmx", "Summer average maximum temperature")
-# setnames(dt, "winter_tmmx", "Winter average maximum temperature")
-# setnames(dt, "summer_rmax", "Summer average maximum relative humidity")
-# setnames(dt, "winter_rmax", "Winter average maximum relative humidity")
-# 
-# # county-level
-# setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
-# setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
-
-
-
-# my.render.cont <- function(x) {
-#   with(stats.apply.rounding(stats.default(x), digits=2), 
-#        sprintf("%s (± %s)", MEAN, SD))
-# }
-
-# get table 1
-tab1 <- table1(~Sex + `Age group` + Race + `Medicaid eligibility` + `Census region` +
-                 pm25 + poverty + popdensity + medianhousevalue + medhouseholdincome + 
-                 pct_owner_occ + education + pct_blk + pct_hispanic + smoke_rate + mean_bmi +
-                 summer_tmmx + winter_tmmx + summer_rmax + winter_rmax
-               #| dead_lead
-               ,
-               data = dt, big.mark = ",", 
+# get table 1 for covariates where I'll use only the year of entry
+tab1_entry <- table1(~sex + age_grp + race + dual + census_region + urban,
+               data = dt[, .SD[1], by = qid], # year of entry only!
+               big.mark = ",", 
                render.continuous = c(.="Mean (SD)"))
 
-
-# # get table 1
-# tab1 <- table1(~Sex + `Age group` + Race + `Medicaid eligibility` + 
-#                  #`Mean annual PM2.5 (ug/m3)` #+
-#                  `Census region` #+
-#                # `% of 65+ population below poverty line` + `Pop. density per square mile` +
-#                # `Median value of owner occupied properties` + `Median household income` +
-#                # `% of housing units occupied by owner` + `% of 65+ population not graduating from high school` +
-#                # `% of 65+ population Black` + `% of 65+ population Hispanic` +
-#                # `% of respondents in county who have ever smoked` + `Mean BMI of respondents in county` +
-#                # `Summer average maximum temperature` + `Winter average maximum temperature` +
-#                # `Summer average maximum relative humidity` + `Winter average maximum relative humidity`
-#                #| dead_lead
-#                ,
-#                data = dt, big.mark = ",", 
-#                render.continuous = c(.="Mean (SD)"))
-
-
-
-
-#write_rds(tab1, file = "results/table1.rds")
-
-# # get table with just regions
-# table1(~`Census region` | dead_12_16, 
-#        data = dt, big.mark = ",", render.continuous = c(.="Mean (SD)"))
-
-
-#tab1
-
-# get table1 as a data.frame (need both of these lines!)
-tab1 <- as.data.frame(tab1)
-tab1 <- as.data.frame(lapply(tab1, as.character), stringsAsFactors = FALSE) # get rid of noquote
-
-# rename columns so they're easier to work with
-names(tab1) <- c("variable", "value")
-
-# do some reformatting to make the area-level covariates cleaner
-
-# initalize vector to store row numbers to remove
-row_remove <- c()
-
-# loop through rows
-for(i in 1:nrow(tab1)){
-  
-  # if current row variable is "  Mean (SD)":
-  if(tab1$variable[i] == "  Mean (SD)"){
-    
-    # make note of row number
-    row_remove <- c(row_remove, i-1)
-    
-    # assign current row the value in the previous row
-    tab1$variable[i] <- tab1$variable[i-1]
-  }
+# custom render function for mean(SD) with rounding
+# for some reason, using this means that there aren't commas in N
+custom_render <- function(x) {
+  mean_val <- sprintf("%.1f", mean(x, na.rm = TRUE))
+  sd_val <- sprintf("%.1f", sd(x, na.rm = TRUE))
+  paste0(format(as.numeric(mean_val), big.mark = ","), " (", sd_val, ")")
 }
 
-# remove rows
-tab1 <- tab1[-c(row_remove),]
+# get table 1 for covariates where I want to average across all years
+tab1_all_years <- table1(~poverty + popdensity + medianhousevalue + medhouseholdincome + 
+                 pct_owner_occ + education + pct_blk + pct_hispanic + smoke_rate + mean_bmi +
+                 summer_tmmx + winter_tmmx + summer_rmax + winter_rmax,
+               data = dt, 
+               #big.mark = ",", 
+               #render.continuous = c(.="Mean (SD)"),
+               render.continuous = custom_render)
 
-# now neaten up the area-level values (previously variable names)
+
+#---------- get all values in a single data.frame ----------#
+
+# get table1s as a dfs (need both of these lines! for some reason)
+tab1_entry <- as.data.frame(tab1_entry)
+tab1_entry <- as.data.frame(lapply(tab1_entry, as.character), 
+                            stringsAsFactors = FALSE) # get rid of noquote
+tab1_all_years <- as.data.frame(tab1_all_years)
+tab1_all_years <- as.data.frame(lapply(tab1_all_years, as.character), 
+                            stringsAsFactors = FALSE) # get rid of noquote
+
+# rename columns so they're easier to work with
+names(tab1_entry) <- c("variable", "value")
+names(tab1_all_years) <- c("variable", "value")
+
+# labels for # of people vs # of observations
+tab1_entry[1,1] <- "Number of individuals"
+tab1_all_years[1,1] <- "Number of observations"
+
+# also get the total number of deaths
+row_deaths <- data.frame(variable = "Number of deaths", 
+                         value = format(dt[,sum(dead_lead)], big.mark = ","))
+
+# bind rows (keeping overall counts at the top)
+tab1 <- rbind(tab1_entry[1,], tab1_all_years[1,], row_deaths,
+              tab1_entry[2:nrow(tab1_entry),], tab1_all_years[2:nrow(tab1_all_years),])
+rm(tab1_entry, tab1_all_years); gc()
+
+# trim white space around variable name (for joining later)
+tab1$variable <- trimws(tab1$variable)
+
+
+#---------- get PM2.5 values for categorical variables ----------#
+
+# new column for total (to calculate PM2.5 overall in the loop)
+dt[, all := "Number of observations"]
+
+# subgroups for PM2.5 estimates
+group_vars <- c("all", "sex", "age_grp", "race", 
+                "dual", "census_region", "urban")
+
+# initialize df
+pm25_all_vars <- data.frame()
+
+for(i in 1:length(group_vars)){
+  
+  # get PM2.5 for one group variable
+  one_var <- dt[, 
+                   .(pm25 = 
+                       paste0(
+                         sprintf("%.1f", mean(pm25, na.rm = TRUE)),
+                         " (",
+                         sprintf("%.1f", sd(pm25, na.rm = TRUE)),
+                         ")"
+                       )),
+                   by = eval(group_vars[i])]
+  
+  names(one_var)[1] <- "variable"
+  
+  # bind to table with all variables
+  pm25_all_vars <- rbind(pm25_all_vars, one_var)
+}
+
+
+# join PM2.5 column to table 1
+tab1 <- left_join(tab1, pm25_all_vars, by = "variable")
+
+
+#---------- clean up full table ----------#
+
+# neaten up the variable names (now in rows)
 tab1 <- tab1 %>%
   mutate(variable = recode(variable,
+                           "age_grp" = "Age at entry",
+                           "race" = "Race/ethnicity",
+                           "sex" = "Sex",
+                           "census_region" = "Region",
+                           "dual" = "Medicaid",
+                           "urban" = "Urbanicity",
                            "pm25" = "Mean annual PM\\(_{2.5}\\) (\\(\\mu g/m^3 \\))",
                            "poverty" = "% of 65+ population below poverty line",
-                           "popdensity" = "Pop. density per square mile",
+                           "popdensity" = "Pop. density per 1,000 square miles",
                            "medianhousevalue" = "Median value of owner occupied properties (\\$10,000)",
                            "medhouseholdincome" = "Median household income (\\$10,000)",
                            "pct_owner_occ" = "% of housing units occupied by owner",
@@ -198,132 +186,45 @@ tab1 <- tab1 %>%
                            "winter_tmmx" = "Winter average maximum temperature (°F)",
                            "summer_rmax" = "Summer average maximum relative humidity (%)",
                            "winter_rmax" = "Winter average maximum relative humidity (%)"
-                           ))
+  ))
 
+# replace NA with " "
+tab1$pm25 <- ifelse(is.na(tab1$pm25), " ", tab1$pm25)
 
-
-# library(kableExtra)
-# b = kable(as.data.frame(tab1), booktabs=TRUE)
-# 
-# c = t1kable(tab1)
-
-# escape % 
+# escape % for latex
 tab1[] <- lapply(tab1, function(x) gsub("%", "\\\\%", x))
 
+# indent (insert horizontal space) 
+tab1[] <- lapply(tab1, function(x) gsub("--", "\\\\hspace{10pt}", x))
 
-# get horizontal space
-tab1[] <- lapply(tab1, function(x) gsub("sub ", "\\\\hspace{10pt}", x))
+# clean up Ns
+tab1$value[1:2] <- str_remove_all(tab1$value[1:2], pattern = "[()N=]")
 
+# get commas (missing with continuous render function)
+tab1[2,2] <- format(as.numeric(tab1[2,2]), big.mark = ",")
 
-# use disparities code to get subscript, mu, etc.
-# wait I made the cohort table manually with \hspace{20pt}
-
-# library(xtable)
-# print(xtable(a, 
-#              type = "latex",
-#              label = "tab:table1",
-#              caption = "Summary of individual-level characteristics for individuals in
-#              the 2010-2012 window. Hospitalizations were assessed at the end of 2010, exposure was 
-#              assessed in 2011, and mortality was assessed in 2012."), 
-#       sanitize.text.function = identity,
-#       include.rownames = FALSE)
-
-
-
-######################################################################
-
-
-#------------ get area-level variables manually ------------#
-
-# this is so I have more control over formatting
-
-# same thing but try to do neighborhood level vars separately
-
-# # SAMPLE FOR NOW
-# load("data/intermediate/rolling_cohort_1000.RData")
-
-# # Specify the columns for which you want to calculate the mean
-# cols_tab1 <- c("pm25", "poverty", "popdensity", "medianhousevalue", "medhouseholdincome", "pct_owner_occ",
-#           "education", "pct_blk", "pct_hispanic", "summer_tmmx", "winter_tmmx", "summer_rmax",
-#           "winter_rmax", "smoke_rate", "mean_bmi")
-# 
-# cols_good_names <- c("Mean annual PM2.5 (ug/m3)",
-#                      "\\% of 65+ population below poverty line",
-#                      "Pop. density per square mile",
-#                      "Median value of owner occupied properties (\\$10,000)",
-#                      "Median household income (\\$10,000)",
-#                      "\\% of housing units occupied by owner",
-#                      "\\% of 65+ population not graduating from high school",
-#                      "\\% of 65+ population Black",
-#                      "\\% of 65+ population Hispanic",
-#                      "\\% of respondents in county who have ever smoked",
-#                      "Mean BMI of respondents in county",
-#                      "Summer average maximum temperature (F)",
-#                      "Winter average maximum temperature (F)",
-#                      "Summer average maximum relative humidity (\\%)",
-#                      "Winter average maximum relative humidity (\\%)")
-# 
-# # Calculate the means and SDs
-# col_means <- dt[, lapply(.SD, mean), .SDcols = cols_tab1] |> t()
-# col_sds <- dt[, lapply(.SD, sd), .SDcols = cols_tab1] |> t()
-# 
-# # put together and format
-# col_means_sds <- cbind.data.frame(col_means, col_sds)
-# 
-# # new column with correct formatting
-# col_means_sds <- col_means_sds %>%
-#   mutate(mean_sd = paste0(round(col_means, 1), " (", round(col_sds, 1), ")"))
-# 
-# # reformat
-# neigh_lev <- data.frame(#variable = paste0("  \\hspace{10pt}", cols_good_names),
-#                         variable = cols_good_names,
-#                         value = col_means_sds$mean_sd)
-# 
-# # make names match a
-# names(neigh_lev) <- c(" ", "Overall")
-# 
-# 
-# a = rbind.data.frame(a, 
-#                      #c("Neighborhood-level", " "),
-#                      neigh_lev)
-# 
-# colnames(a) <- a[1,]
-# a <- a[-1,]
-
-#
-# # county-level
-# setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
-# setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
-
-# rename columns again (first row)
-names(tab1) <- str_remove_all(tab1[1,], pattern = "[()]")
-tab1 <- tab1[-1,]
-
-# get caption, label, and file name
-if(obs_include == "2010_only"){
-  
-  cap <- "Summary of characteristics for individuals in
-        the 2010-2011 window. The table shows N (\\%) for variables displayed
-        as categorical and mean (SD) for continuous variables.
-        Exposure was assessed in 2010, and mortality was assessed in 2011."
-  table_label <- "tab:table1_2010"
-  file_name <- "results/tables/table1_2010.tex"
-  
-} else if(obs_include == "all_pt"){
-  
-  cap <- "Summary of characteristics across all rolling windows. 
-        The table shows N (\\%) for variables displayed
-        as categorical and mean (SD) for continuous variables."
-  table_label <- "tab:table1_allpt"
-  file_name <- "results/tables/table1_allpt.tex"
-}
+# rename columns (first row)
+names(tab1) <- c(" ", "N (\\%)", "PM2.5 mean (SD)")
 
 # print in latex
 print(xtable(tab1,
-             type = "latex",
-             label = table_label,
-             caption = cap),
-      file = file_name, 
+             type = "latex"),
+      file = "results/tables/table1.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
+
+
+##############################################
+
+# get info on age
+
+paste0("mean age in exposure window: ", dt[,mean(age)])
+paste0("SD age in exposure window: ", dt[,sd(age)])
+
+# restrict to first year in dt
+dt <- dt[, .SD[1], by = qid]
+
+paste0("mean age at entry: ", dt[,mean(age)])
+paste0("SD age at entry: ", dt[,sd(age)])
+
 
