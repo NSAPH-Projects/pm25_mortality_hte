@@ -147,8 +147,7 @@ print(xtable(subgroup_n,
              label = "tab:subgroup_n",
              caption = "The number of observations (two-year rolling windows) and the number
              of unique beneficiaries in each subgroup."),
-      #file = "results/tables/subgroup_n.tex",
-      file = "results/tables/subgroup_n_plus.tex",
+      file = "results/tables/subgroup_n.tex",
       sanitize.text.function = identity,
       include.rownames = FALSE)
 
