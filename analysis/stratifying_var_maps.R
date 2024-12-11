@@ -16,63 +16,23 @@ library(cowplot)
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
-#load("data/intermediate/rolling_cohort_1000.RData")
-
-
-###############################################################
-
-# fix county.x county.y issue!!
-
-setnames(dt, "county.x", "county")
-dt[, county.y := NULL]
-saveRDS(dt, file = "data/intermediate/rolling_cohort_fix_county.rds")
-
-###############################################################3
-
-# SAVE NEW SAMPLE
-
-id_mini <- sample(dt[,qid], 1000, replace = FALSE)
-dt_mini <- dt[qid %in% id_mini,]
-saveRDS(dt_mini, file = "data/intermediate/rolling_cohort_1000_new.rds")
-
-
-###############################################################
-
-
-# # SAMPLE FOR NOW TO TEST ARRAY
-# load("data/intermediate/rolling_cohort_1000.RData")
-
+# dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
 gc()
+
 
 #######################################################################
 
-# new columns
+# remove counties with <11 people
+dt <- dt[, if (uniqueN(qid) >= 11) .SD, by = county]
 
-# # above/below median age
-# median_age <- dt[, median(age)]
-# dt[, old := as.integer(age > median_age)]
-
-# # above/below median age
-# median_popdens <- dt[, median(popdensity)]
-# dt[, urban := as.integer(popdensity > median_popdens)]
-#
-
-#######################################################################
-
-# load zip --> county crosswalk
-zip2county <- read.csv("/n/dominici_lab_ro/lab/data/exposures/exposure/zip2county_master_xwalk/zip2county_master_xwalk_2010_2023_tot_ratio_one2one.csv")
+plot_dat <- dt[, .(
+  # median_age = median(age, na.rm = TRUE), # Uncomment if needed
+  pct_female = (1 - mean(sex, na.rm = TRUE)) * 100,
+  pct_white = (mean(race_white, na.rm = TRUE)) * 100,
+  pct_dual = (mean(dual, na.rm = TRUE)) * 100,
+  urban = first(urban)
+), by = county]
 gc()
-
-# select columns of interest
-zip2county <- zip2county %>%
-  filter(year == 2010) %>%
-  select(zip, county)
-
-# merge with data
-dt <- merge(dt, zip2county, by = "zip", all.x = TRUE, all.y = FALSE,
-            allow.cartesian = TRUE)
-gc()
-
 
 #######################################################################
 
@@ -90,37 +50,25 @@ state_sf <- read_sf("data/raw/shapefiles/cb_2015_us_state/cb_2015_us_state_20m.s
 # state_county_sf <- left_join(county_sf, as.data.frame(state_sf), by = "STATEFP")
 
 # merge with data
-
-colnames(county_sf)
-colnames(dt)
-
-county_dat <- right_join(county_sf, dt, by = "county")
-gc()
-
-
-#######################################################################
-
-# FILTER OUT COUNTIES WITH <11 PEOPLE
-
-paste0("Any counties with < 11 people?")
-n_per_county <- dt[, .N, by = county]
-paste0(sum(n_per_county$N < 11), " counties with < 11 people")
-counties_exclude <- n_per_county$county[n_per_county$N < 11]
-
-# NOW GET PLOT DATA (county-level summarized variables)
-
-plot_dat <- county_dat %>%
-  filter(!county %in% counties_exclude) %>%
-  group_by(county) %>%
-  summarise(# median_age = median(age, na.rm = TRUE),
-            # skipping male/female
-            pct_white = mean(race_white, na.rm = TRUE),
-            pct_dual = mean(dual, na.rm = TRUE),
-            urban = first(urban)
-            )
+plot_dat <- right_join(county_sf, plot_dat, by = "county")
 gc()
 
 #######################################################################
+
+# # % sex map
+# map_sex <- plot_dat %>%
+#   ggplot() +
+#   geom_sf(aes(fill = pct_female), col = NA) +
+#   geom_sf(data = state_sf, fill = NA, col = "black") +
+#   labs(fill = "% Female  ") +
+#   coord_sf(crs = st_crs(5070)) +
+#   scale_fill_viridis(option = "D", direction = -1) +
+#   theme_void() +
+#   theme(plot.margin = margin(0, 1, 0, 1, "cm"),
+#         legend.position = "bottom") +
+#   guides(fill = guide_colorbar(ticks = FALSE,
+#                                barheight = 1, barwidth = 7))
+# gc()
 
 # % white map
 map_pct_white <- plot_dat %>%
@@ -135,7 +83,6 @@ map_pct_white <- plot_dat %>%
         legend.position = "bottom") +
   guides(fill = guide_colorbar(ticks = FALSE,
                                barheight = 1, barwidth = 7))
-
 gc()
 
 # % dual map
@@ -145,13 +92,12 @@ map_pct_dual <- plot_dat %>%
   geom_sf(data = state_sf, fill = NA, col = "black") +
   labs(fill = "% Medicaid eligible  ") +
   coord_sf(crs = st_crs(5070)) +
-  scale_fill_viridis(option = "D") +
+  scale_fill_viridis(option = "A") +
   theme_void() +
   theme(plot.margin = margin(0, 1, 0, 1, "cm"),
         legend.position = "bottom") +
   guides(fill = guide_colorbar(ticks = FALSE,
                                barheight = 1, barwidth = 7))
-
 gc()
 
 # urban map
@@ -159,42 +105,27 @@ map_urban <- plot_dat %>%
   ggplot() +
   geom_sf(aes(fill = urban), col = NA) +
   geom_sf(data = state_sf, fill = NA, col = "black") +
-  labs(fill = "Urban?  ") +
+  labs(fill = "") +
+  scale_fill_manual(values = c("TRUE" = "gray50", "FALSE" = "#7aeb8d"),
+                      labels = c("TRUE" = "Urban", "FALSE" = "Rural")) +
   coord_sf(crs = st_crs(5070)) +
   theme_void() +
   theme(plot.margin = margin(0, 1, 0, 1, "cm"),
-        legend.position = "bottom") +
-  guides(fill = guide_colorbar(ticks = FALSE,
-                               barheight = 1, barwidth = 7))
-
-
+        legend.position = "bottom")
 gc()
 
 
-# save maps
-
-all_plots <- align_plots(map_pct_white, map_pct_dual, map_urban,
-                         align = "hv")
-
-pdf("results/figures/strat_var_maps.pdf", height = 5, width = 13)
-plot_grid(all_plots[[1]], all_plots[[2]], all_plots[[3]],
-          nrow = 1)
-dev.off()
-
-
-#######################################################################
-
-# separate map for census region
-state_dat <- right_join(state_sf, dt, by = c("STUSPS" = "statecode"))
-
 # group to state level
-census_region_dat <- state_dat %>%
-  group_by(NAME) %>%
-  summarise(census_region = first(census_region))
+state_dat <- dt[, .(census_region = first(census_region)), by = statecode]
+
+# join with state geometry
+state_dat <- right_join(state_sf, state_dat, by = c("STUSPS" = "statecode"))
+
 
 # plot
-pdf("results/figures/regions_map.pdf", height = 5, width = 6)
-region_map <- census_region_dat %>%
+region_map <- state_dat %>%
+  mutate(census_region = factor(census_region,
+                                levels = c("West", "Midwest", "South", "Northeast"))) %>%
   ggplot() +
   geom_sf(aes(fill = census_region), col = "black") +
   labs(fill = "") +
@@ -206,6 +137,17 @@ region_map <- census_region_dat %>%
   theme_void() +
   theme(plot.margin = margin(0, 1, 0, 0, "cm"),
         legend.position = "bottom")
-dev.off()
 gc()
+
+
+# save maps
+all_plots <- align_plots(map_pct_white, map_pct_dual, map_urban, region_map,
+                         align = "hv")
+
+pdf("results/figures/strat_var_maps.pdf", height = 6, width = 9)
+plot_grid(all_plots[[1]], all_plots[[2]], all_plots[[3]], all_plots[[4]],
+          nrow = 2)
+dev.off()
+
+
 
