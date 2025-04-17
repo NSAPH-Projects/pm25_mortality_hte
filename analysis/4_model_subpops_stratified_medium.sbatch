@@ -4,7 +4,7 @@
 #SBATCH --mem=1400GB # memory pool for all cores (won't be enough for all subpops)
 #SBATCH -t 5:00:00 # time 
 #SBATCH -o slurm-subpop-strat-%a.out
-#SBATCH --array=5,18,22,23,24,26,28 # medium subpops
+#SBATCH --array=5,18,22,23,24,26 # medium subpops
 
 module load R/4.2.2-fasrc01
 
