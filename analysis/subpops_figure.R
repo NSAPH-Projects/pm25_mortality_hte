@@ -10,7 +10,9 @@ library(xtable)
 #----- load model results
 
 # path to results
-path_res <- "results/models/unstratified/"
+
+# path_res <- "results/models/unstratified/"
+path_res <- "data/models/unstratified/"
 
 # get all file names in directory
 file_names <- list.files(path_res)
@@ -108,7 +110,7 @@ cond_df <- data.frame("cond_abbr" = cond_abbr,
 pm25_df <- left_join(pm25_df, cond_df, by = "cond_abbr")
 
 # get prevalence data
-prev_df <- readRDS("results/subpop_prevalence.rds")
+prev_df <- readRDS("results/subgroup_prevalence.rds")
 
 # join with plotting data
 pm25_df <- left_join(pm25_df, prev_df, by = "cond_abbr")
@@ -136,15 +138,16 @@ saveRDS(cond_abbr_order, "data/intermediate/cond_abbr_OR_order.rds")
 #----- plot
 
 # try facets
-pdf("results/figures/subpop_effects.pdf", width = 9, height = 6)
+pdf("results/figures/subpop_effects.pdf", width = 11, height = 10)
 pm25_df |> 
   filter(cond_abbr != "nohosp") |> # remove no previous hosp (biased)
   mutate(special = factor(ifelse(cond_abbr %in% c("nohosp", "fullpop"), TRUE, FALSE), 
                           levels = c(FALSE, TRUE)#,
                           #levels = c(TRUE, FALSE)
-                          ),
-         highrisk = ifelse(OR > pm25_df$OR[pm25_df$cond_abbr == "fullpop"], 
-                           "high", "low")) |>
+                          )#,
+         # highrisk = ifelse(OR > pm25_df$OR[pm25_df$cond_abbr == "fullpop"], 
+         #                   "high", "low")
+         ) |>
   ggplot(aes(x = OR, y = cond_name_prev#, #col = special
              #col = highrisk
              )) +
@@ -154,16 +157,17 @@ pm25_df |>
   #geom_vline(xintercept = pm25_df$OR[pm25_df$cond_abbr == "fullpop"], lty = 2, col = "gray50") +
   labs(x = expression("OR (95% CI) for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
        y = "") +
-  xlim(c(0.999, 1.0138)) +
+  xlim(c(0.998, 1.015)) +
   #scale_color_manual(values = c(`TRUE` = "black", `FALSE` = "black")) +
   facet_grid(special ~ ., scales = "free_y", space = "free") +
   # geom_text(aes(x = 0.999, y = cond_name_prev, label = sig)) +
-  theme_classic(base_size = 12) +
+  theme_classic(base_size = 16) +
   theme(legend.position = "none",
         axis.line.y = element_blank(),
         axis.ticks.y = element_blank(),
         panel.grid.major.y = element_line(),
-        strip.text = element_blank())
+        strip.text = element_blank(),
+        axis.text.y = element_text(size = 16))
 dev.off()
 
 

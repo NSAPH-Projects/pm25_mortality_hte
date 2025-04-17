@@ -12,7 +12,8 @@ library(cowplot)
 #----- load model results
 
 # path to results
-path_res <- "results/models/stratified/"
+# path_res <- "results/models/stratified/"
+path_res <- "data/models/stratified/"
 
 # get all file names in directory
 file_names <- list.files(path_res)
@@ -133,11 +134,11 @@ pm25_df <- left_join(pm25_df, cond_df, by = "cond_abbr")
 # make strata more clear for plotting
 pm25_df <- pm25_df %>%
   mutate(strat = case_when(
-    strat_var == "race_white" & strat == 1 ~ "Non-Hispanic white",
-    strat_var == "race_white" & strat == 0 ~ "Non-white",
+    # strat_var == "race_white" & strat == 1 ~ "Non-Hispanic white",
+    # strat_var == "race_white" & strat == 0 ~ "Non-white",
     
     strat_var == "sex" & strat == 1 ~ "Male",
-    strat_var == "sex" & strat == 0 ~ "Female",
+    strat_var == "sex" & strat == 2 ~ "Female",
     
     strat_var == "race" & strat == 1 ~ "White",
     strat_var == "race" & strat == 2 ~ "Black",
@@ -149,8 +150,8 @@ pm25_df <- pm25_df %>%
     strat_var == "dual" & strat == 1 ~ "Medicaid eligible",
     strat_var == "dual" & strat == 0 ~ "Medicaid ineligible",
     
-    strat_var == "old" & strat == 1 ~ "Above median age",
-    strat_var == "old" & strat == 0 ~ "Below median age",
+    # strat_var == "old" & strat == 1 ~ "Above median age",
+    # strat_var == "old" & strat == 0 ~ "Below median age",
     
     strat_var == "urban" & strat == TRUE ~ "Urban",
     strat_var == "urban" & strat == FALSE ~ "Rural",
