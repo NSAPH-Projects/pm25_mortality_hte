@@ -1,6 +1,6 @@
 
 ########################################################
-### Hetergeneous Effects of PM2.5 on Mortality
+### Heterogeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
 ### Discrete time logistic regression
 ########################################################
@@ -28,15 +28,16 @@ ccw_names <- names(dt)[str_detect(names(dt), "ever")]
 
 # get two new columns
 
-# new column that = 1 for individuals with no previous hosp (all other indicators = 0)
-dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = ccw_names]
+# # new column that = 1 for individuals with no previous hosp (all other indicators = 0)
+# dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = ccw_names]
 
 # new column that = 1 for all individuals
 dt[, fullpop := 1]
 
 
 # List of binary indicator column names
-subpops <- c(ccw_names, "nohosp", "fullpop")
+#subpops <- c(ccw_names, "nohosp", "fullpop")
+subpops <- c(ccw_names, "fullpop")
 
 # get column name for current subpop 
 ccw_current <- subpops[ccw_idx]
@@ -52,7 +53,7 @@ str_remove(ccw_current, "_ever")
 
 # time discrete logistic regression model
 
-outcome_fit <- glm(dead_lead ~ 
+outcome_fit <- glm(died_next_year ~ 
                      
                      # exposure
                      pm25 +
@@ -67,7 +68,7 @@ outcome_fit <- glm(dead_lead ~
                      as.factor(census_region) +
                      
                      # sex, age, race, Medicaid eligibility
-                     sex + age + dual + 
+                     sex + age_dob + dual + 
                      race_black + race_other + race_asian + race_hispanic + race_native +
                      
                      # area-level covariates
@@ -85,5 +86,5 @@ summary(outcome_fit)$coefficients
 # save model coefficients
 # not using scratch space because I'm only saving coefficients
 saveRDS(summary(outcome_fit)$coefficients, 
-        file = paste0("results/models/unstratified/coeff_", str_remove(ccw_current, "_ever"), ".rds"))
+        file = paste0("data/models/unstratified/coeff_", str_remove(ccw_current, "_ever"), ".rds"))
 

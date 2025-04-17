@@ -1,6 +1,6 @@
 
 ########################################################
-### Hetergeneous Effects of PM2.5 on Mortality
+### Heterogeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
 ### Discrete time logistic regression, stratified
 ########################################################
@@ -49,8 +49,8 @@ paste0("Stratifying variable: ", stratify_by)
 
 # above/below median age
 if(stratify_by == "old"){
-  median_age <- dt[, median(age)]
-  dt[, old := as.integer(age > median_age)]
+  median_age <- dt[, median(age_dob)]
+  dt[, old := as.integer(age_dob > median_age)]
 }
 
 # # above/below median urbanicity
@@ -66,14 +66,14 @@ if(stratify_by == "old"){
 # CCW indicator columns
 ccw_names <- names(dt)[str_detect(names(dt), "ever")]
 
-# new column that = 1 for individuals with no previous hosp (all other indicators = 0)
-dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = ccw_names]
+# # new column that = 1 for individuals with no previous hosp (all other indicators = 0)
+# dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = ccw_names]
 
 # new column that = 1 for all individuals
 dt[, fullpop := 1]
 
 # List of binary indicator column names
-subpops <- c(ccw_names, "nohosp", "fullpop")
+subpops <- c(ccw_names, "fullpop")
 
 # get column name for current subpop 
 ccw_current <- subpops[ccw_idx]
@@ -97,9 +97,9 @@ strata <- unique(dt[, ..stratify_by])[[1]]
 
 # write out model formula
 model_form <- 
-  "dead_lead ~ 
+  "died_next_year ~ 
   pm25 + as.factor(year) + as.factor(year_follow) + census_region +
-  sex + age + dual + race_black + race_other + race_asian + race_hispanic + race_native +
+  sex + age_dob + dual + race_black + race_other + race_asian + race_hispanic + race_native +
   poverty + popdensity + medianhousevalue + medhouseholdincome +
   pct_owner_occ + education + smoke_rate + mean_bmi +
   pct_blk + pct_hispanic + summer_tmmx + summer_rmax + winter_tmmx + winter_rmax"
@@ -110,9 +110,9 @@ model_form <- str_remove(model_form, pattern = paste0(stratify_by, " \\+"))
 
 # if stratifying by race, remove other race variable indicators
 if(stratify_by == "race"){
-  model_form <- "dead_lead ~ 
+  model_form <- "died_next_year ~ 
   pm25 + as.factor(year) + as.factor(year_follow) + census_region +
-  sex + age + dual +
+  sex + age_dob + dual +
   poverty + popdensity + medianhousevalue + medhouseholdincome +
   pct_owner_occ + education + smoke_rate + mean_bmi +
   pct_blk + pct_hispanic + summer_tmmx + summer_rmax + winter_tmmx + winter_rmax"
@@ -139,7 +139,7 @@ for(i in 1:length(strata)){
   # save model coefficients
   # not using scratch space because I'm only saving coefficients
   saveRDS(summary(outcome_fit)$coefficients, 
-          file = paste0("results/models/stratified/coeff_", str_remove(ccw_current, "_ever"), 
+          file = paste0("data/models/stratified/coeff_", str_remove(ccw_current, "_ever"), 
                         "_", "strat_", stratify_by, "_", stratum, ".rds"))
   
   rm(outcome_fit); gc()
