@@ -1,6 +1,6 @@
 
 ########################################################
-### Hetergeneous Effects of PM2.5 on Mortality
+### Heterogeneous Effects of PM2.5 on Mortality
 ### Author: Lauren Mock
 ### Exploratory data analysis
 ########################################################
@@ -16,8 +16,15 @@ library(magrittr)
 library(arrow)
 library(readr)
 
-dt <- read_rds("data/intermediate/rolling_cohort.rds")
-#dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
+#dt <- read_rds("data/intermediate/rolling_cohort.rds")
+dt <- readRDS("data/intermediate/rolling_cohort_10000.rds")
+
+# just a little check
+a <- dt %>% select(bene_id, year, first_year_ffs, last_year_ffs, yod, 
+                  died_next_year, n_windows, year_follow) %>%
+  arrange(bene_id, year)
+
+
 
 # make a new variable for race + dual
 dt[, race_dual := paste0(race, "_", dual)]
@@ -25,10 +32,10 @@ dt[, race_dual := paste0(race, "_", dual)]
 
 #---------- Basic EDA ----------#
 
-pdf("results/EDA.pdf")
+#pdf("results/EDA.pdf")
 
 # how many individuals?
-n_indiv <- length(unique(dt[,qid]))
+n_indiv <- length(unique(dt[,bene_id]))
 paste0(n_indiv, " individuals")
 
 # how many rows of data?
@@ -36,12 +43,12 @@ n_rows <- nrow(dt)
 paste0(n_rows, " rows of data (exposure years)")
 
 # how many deaths?
-n_deaths <- sum(dt$dead_lead)
+n_deaths <- sum(dt$died)
 paste0(n_deaths, " deaths observed")
 
 # How many person-years?
 # number of rows + (2 * number of people)
-# This is because each person contributes two years (first and last) that aren't 
+# This is because each person contributes two years (first and last) that aren't
 # captured as exposure years
 n_py <- n_rows + 2*n_indiv
 paste0(n_py, " total person-years")
@@ -66,7 +73,7 @@ dt |>
   ggplot() +
   geom_density(aes(n_windows, col = race), bw = 0.9) +
   labs(x = "Number of rolling windows per person",
-       y = "Count") +
+       y = "Density") +
   scale_y_continuous(labels = label_comma()) +
   theme_bw()
 
@@ -139,19 +146,19 @@ race_year_follow |>
 #sum(dt[,dead_12_16], na.rm = TRUE)/nrow(dt) * 100 # 28% in ric, 29% in lauren
 
 # what % of individuals died in their last year of followup?
-pct_dead_last <- nrow(dt[(year == last_year_ffs - 1) & (dead_lead == 1)]) / 
-  length(unique(dt[,qid]))
+pct_dead_last <- nrow(dt[(year == last_year_ffs - 1) & (died_next_year == 1)]) /
+  length(unique(dt[,bene_id]))
 paste0(pct_dead_last * 100, " % of individuals died in last year of follow-up")
 
 # what % of black individuals died in their last year of followup?
-n_black <- length(unique(dt[race == 2, qid]))
-pct_dead_last_black <- nrow(dt[(year == last_year_ffs - 1) & (dead_lead == 1) & (race == 2)]) / 
+n_black <- length(unique(dt[race == 2, bene_id]))
+pct_dead_last_black <- nrow(dt[(year == last_year_ffs - 1) & (died == 1) & (race == 2)]) /
   n_black
 paste0(pct_dead_last_black * 100, " % of black individuals died in last year of follow-up")
 
 # asian
-n_asian <- length(unique(dt[race == 4, qid]))
-pct_dead_last_asian <- nrow(dt[(year == last_year_ffs - 1) & (dead_lead == 1) & (race == 4)]) / 
+n_asian <- length(unique(dt[race == 4, bene_id]))
+pct_dead_last_asian <- nrow(dt[(year == last_year_ffs - 1) & (died == 1) & (race == 4)]) /
   n_asian
 paste0(pct_dead_last_asian * 100, " % of asian individuals died in last year of follow-up")
 
@@ -162,15 +169,15 @@ paste0(pct_dead_last_asian * 100, " % of asian individuals died in last year of 
 dt[, .(pct_dual = mean(dual)), by = race]
 
 # what % of rows have outcome = 1 (death)?
-pct_outcome <- mean(dt[,dead_lead]) # 5.4%
+pct_outcome <- mean(dt[,died]) # 5.4%
 paste0(round(pct_outcome*100, 1), "% of rows have death in the following year")
 # by division?
-dt[, .(pct_dead = mean(dead_lead)), by = census_div]
+dt[, .(pct_dead = mean(died)), by = census_div]
 # by race?
-dt[, .(pct_dead = mean(dead_lead)), by = race]
+dt[, .(pct_dead = mean(died)), by = race]
 # by race and dual eligibilty?
-race_dual_tab <- dt[race_dual %in% c("1_0", "1_1", "2_0", "2_1"), 
-   .(pct_dead = mean(dead_lead)), by = race_dual]
+race_dual_tab <- dt[race_dual %in% c("1_0", "1_1", "2_0", "2_1"),
+   .(pct_dead = mean(died)), by = race_dual]
 
 race_dual_tab %<>%
   as.data.frame() %>%
@@ -183,7 +190,7 @@ race_dual_tab %<>%
   pct_dead = pct_dead * 100
   )
 
-race_dual_tab$race_dual <- factor(race_dual_tab$race_dual, 
+race_dual_tab$race_dual <- factor(race_dual_tab$race_dual,
                                   levels = c("white, not eligible", "black, not eligible",
                                              "white, eligible", "black, eligible"))
 
@@ -202,15 +209,15 @@ dt |>
   labs(x = expression(PM[2.5]),
        y = "Count") +
   scale_y_continuous(labels = label_comma()) +
-  #geom_vline(xintercept = 10, col = "black", linetype = 2) + 
-  #geom_vline(xintercept = 12, col = "black", linetype = 2) + 
+  #geom_vline(xintercept = 10, col = "black", linetype = 2) +
+  #geom_vline(xintercept = 12, col = "black", linetype = 2) +
   # geom_text(x = 15, y = 40000,
   #           label = paste0(round(expo_12*100, 0), "%"),
   #           hjust   = 1,
   #           vjust   = 1) +
-  # annotate("text", 
-  #          label = paste0(round(expo_12, 0), "%"), 
-  #          x = Inf, y = Inf, 
+  # annotate("text",
+  #          label = paste0(round(expo_12, 0), "%"),
+  #          x = Inf, y = Inf,
   #          hjust = 1.2, vjust = 1.5) +
   theme_light()
 
@@ -221,8 +228,8 @@ dt |>
   labs(x = expression(PM[2.5]),
        y = "Count") +
   scale_y_continuous(labels = label_comma()) +
-  #geom_vline(xintercept = 10, col = "black", linetype = 2) + 
-  #geom_vline(xintercept = 12, col = "black", linetype = 2) + 
+  #geom_vline(xintercept = 10, col = "black", linetype = 2) +
+  #geom_vline(xintercept = 12, col = "black", linetype = 2) +
   facet_wrap(~census_region, nrow = 3) +
   # geom_text(data = expo_12_region,
   #           mapping = aes(x = Inf, y = Inf, label = exposed_12),
@@ -243,8 +250,8 @@ dt |>
   labs(x = expression(PM[2.5]),
        y = "Count") +
   scale_y_continuous(labels = label_comma()) +
-  #geom_vline(xintercept = 10, col = "black", linetype = 2) + 
-  #geom_vline(xintercept = 12, col = "black", linetype = 2) + 
+  #geom_vline(xintercept = 10, col = "black", linetype = 2) +
+  #geom_vline(xintercept = 12, col = "black", linetype = 2) +
   facet_wrap(~census_div, nrow = 3) +
   # geom_text(data = expo_12_division,
   #           mapping = aes(x = Inf, y = Inf, label = exposed_12),
@@ -261,8 +268,8 @@ dt |>
   labs(x = expression(PM[2.5]),
        y = "Count") +
   scale_y_continuous(labels = label_comma()) +
-  #geom_vline(xintercept = 10, col = "black", linetype = 2) + 
-  #geom_vline(xintercept = 12, col = "black", linetype = 2) + 
+  #geom_vline(xintercept = 10, col = "black", linetype = 2) +
+  #geom_vline(xintercept = 12, col = "black", linetype = 2) +
   # facet_wrap(~census_div, nrow = 3) +
   # geom_text(data = expo_12_division,
   #           mapping = aes(x = Inf, y = Inf, label = exposed_12),
@@ -279,8 +286,8 @@ dt |>
   labs(x = expression(PM[2.5]),
        y = "Count") +
   scale_y_continuous(labels = label_comma()) +
-  #geom_vline(xintercept = 10, col = "black", linetype = 2) + 
-  #geom_vline(xintercept = 12, col = "black", linetype = 2) + 
+  #geom_vline(xintercept = 10, col = "black", linetype = 2) +
+  #geom_vline(xintercept = 12, col = "black", linetype = 2) +
   # facet_wrap(~census_div, nrow = 3) +
   # geom_text(data = expo_12_division,
   #           mapping = aes(x = Inf, y = Inf, label = exposed_12),
@@ -304,8 +311,8 @@ dt |>
 #   theme(strip.background = element_rect(fill = "white"))
 
 # plot years of death (filter to year of death so no repeated indivs)
-dt[dead_lead == 1,] |>
-  ggplot(aes(death_year)) +
+dt[died_next_year == 1,] |>
+  ggplot(aes(yod)) +
   geom_bar(col = "white", fill = "skyblue2") +
   labs(x = "Year of death",
        y = "Number of individuals") +
@@ -313,9 +320,9 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # plot age of death in this cohort (each indiv can only die once so this works)
-dt[dead_lead == 1,] |>
+dt[died_next_year == 1,] |>
   ggplot() +
-  geom_bar(aes(age + 1),
+  geom_bar(aes(age_dob + 1),
            col = "white", fill = "skyblue2") +
   labs(x = "Age at death",
        y = "Number of individuals") +
@@ -324,7 +331,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # distribution of age at death
-dt[dead_lead == 1,] |>
+dt[died == 1,] |>
   mutate(race = case_when(
     race == 1 ~ "white",
     race == 2 ~ "black",
@@ -341,7 +348,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # death in which year of follow-up?
-dt[dead_lead == 1,] |>
+dt[died_next_year == 1,] |>
   ggplot() +
   geom_bar(aes(year_follow),
            col = "white", fill = "skyblue2") +
@@ -351,7 +358,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # death in which year of follow-up? by race
-dt[dead_lead == 1,] |>
+dt[died == 1,] |>
   mutate(race = case_when(
     race == 1 ~ "white",
     race == 2 ~ "black",
@@ -368,7 +375,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # death in which year of follow-up? by dual
-dt[dead_lead == 1,] |>
+dt[died == 1,] |>
   ggplot() +
   geom_density(aes(year_follow, col = as.factor(dual)), bw = 0.9) +
   labs(x = "Year of follow-up at death",
@@ -377,7 +384,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # death in which year of follow-up? by race + dual
-dt[dead_lead == 1,] |>
+dt[died == 1,] |>
   filter(race_dual %in% c("1_0", "1_1", "2_0", "2_1")) |>
   ggplot() +
   geom_density(aes(year_follow, col = race_dual), bw = 0.9) +
@@ -387,7 +394,7 @@ dt[dead_lead == 1,] |>
   theme_light()
 
 # what percentage of individuals died in each rolling window?
-pct_dead <- dt[, .(pct_dead = mean(dead_lead)*100), by = .(year, race)]
+pct_dead <- dt[, .(pct_dead = mean(died)*100), by = .(year, race)]
 pct_dead |>
   mutate(race = case_when(
     race == 1 ~ "white",
@@ -398,13 +405,13 @@ pct_dead |>
     race == 6 ~ "native"
   )) |>
   ggplot() +
-  geom_line(aes(x = year, y = pct_dead, col = race)) + 
+  geom_line(aes(x = year, y = pct_dead, col = race)) +
   labs(x = "Exposure year", y = "% dead in following year") +
-  ylim(c(0, 8)) + 
+  ylim(c(0, 8)) +
   theme_light()
 
 # same for follow-up year
-pct_dead <- dt[, .(pct_dead = mean(dead_lead)*100), by = .(year_follow, race)]
+pct_dead <- dt[, .(pct_dead = mean(died)*100), by = .(year_follow, race)]
 pct_dead |>
   mutate(race = case_when(
     race == 1 ~ "white",
@@ -415,9 +422,9 @@ pct_dead |>
     race == 6 ~ "native"
   )) |>
   ggplot() +
-  geom_line(aes(x = year_follow, y = pct_dead, col = race)) + 
+  geom_line(aes(x = year_follow, y = pct_dead, col = race)) +
   labs(x = "Year of follow-up", y = "% dead in following year") +
-  #ylim(c(0, 13)) + 
+  #ylim(c(0, 13)) +
   theme_light()
 
 # mean age by year
@@ -433,9 +440,9 @@ age_dist |>
   )) |>
   ggplot() +
   geom_line(aes(x = year, y = mean_age, col = race)) +
-  labs(x = "Year", 
+  labs(x = "Year",
        y = "Mean age") +
-  #ylim(c(0, 105)) + 
+  #ylim(c(0, 105)) +
   theme_light()
 
 # mean age by follow-up year
@@ -451,13 +458,13 @@ age_dist |>
   )) |>
   ggplot() +
   geom_line(aes(x = year_follow, y = mean_age, col = race)) +
-  labs(x = "Follow-up year", 
+  labs(x = "Follow-up year",
        y = "Mean age") +
-  #ylim(c(0, 105)) + 
+  #ylim(c(0, 105)) +
   theme_light()
 
 # among 80 year olds, what % died in each follow-up year?
-pct_dead_80 <- dt[age == 80, .(pct_dead = mean(dead_lead)), by = .(year_follow, race)]
+pct_dead_80 <- dt[age == 80, .(pct_dead = mean(died)), by = .(year_follow, race)]
 pct_dead_80 |>
   mutate(race = case_when(
     race == 1 ~ "white",
@@ -470,7 +477,7 @@ pct_dead_80 |>
   ggplot() +
   geom_line(aes(x = year_follow, y = pct_dead, col = race)) +
   labs(title = "only 80 year olds",
-       x = "Follow-up year", 
+       x = "Follow-up year",
        y = "% died in the next year") +
   theme_light()
 
@@ -515,7 +522,7 @@ dt[, .(mean_n_windows = mean(n_windows)), by = year]
 # #---------- Censoring ----------#
 
 # # # What % of people were censored (left FFS) before death?
-# cens <- dt[year == last_year_ffs - 1 & !(dead_lead == 1),]
+# cens <- dt[year == last_year_ffs - 1 & !(died == 1),]
 # nrow(cens) / n_indiv # 67%
 
 # # # years at risk in full cohort
@@ -526,7 +533,7 @@ dt[, .(mean_n_windows = mean(n_windows)), by = year]
 # #        y = "Number of individuals") +
 # #   scale_y_continuous(labels = label_comma()) +
 # #   theme_light()
-# 
+#
 # # age distribution at time of censoring
 # dt[(cens)] |>
 #   ggplot() +
@@ -535,7 +542,7 @@ dt[, .(mean_n_windows = mean(n_windows)), by = year]
 #        y = "Number of individuals") +
 #   scale_y_continuous(labels = label_comma()) +
 #   theme_bw()
-# 
+#
 # # year of censoring
 # dt[(cens)] |>
 #   ggplot(aes(last_year_ffs)) +
@@ -544,8 +551,8 @@ dt[, .(mean_n_windows = mean(n_windows)), by = year]
 #        y = "Number of Individuals") +
 #   scale_y_continuous(labels = label_comma()) +
 #   theme_bw()
-# 
-# 
+#
+#
 # # separate dt for censored people
 # dt.cens <- dt[cens == 1]
 # # now remove censored people
@@ -622,20 +629,20 @@ num_ccw_freq
 #                   by = census_region,
 #                   .SDcols = cond_abbr] |>
 #   gather(key = "cond_abbr", value = "prev_region", -census_region)
-# 
+#
 # # merge with full names for plotting
 # prev_df <- left_join(conditions, prev_region, by = "cond_abbr") |>
 #   left_join(prev_overall, by = "cond_abbr")
-# 
+#
 # # make conditions factors with levels sorted by by overall prevalence (for plotting)
 # prev_df$cond_name <- factor(prev_df$cond_name, levels = cond_name[order(prev_overall$prev_overall)])
-# 
+#
 # # get min and max prevalence values across regions
 # prev_min_max <- prev_df %>%
 #   group_by(cond_name) %>%
 #   summarize(min_prev = min(prev_region),
 #             max_prev = max(prev_region))
-# 
+#
 # # plot
 # prev_df |>
 #   ggplot(aes(x = prev_region, y = cond_name)) +
@@ -646,10 +653,10 @@ num_ccw_freq
 #        y = "",
 #        col = "") +
 #   theme_bw()
-# 
-# 
+#
+#
 # #----------------------------------------------------------- by race
-# 
+#
 # # How common is each chronic condition by race?
 # prev_race <- dt[, lapply(.SD, function(x) sum(x) / .N * 100),
 #                 by = race,
@@ -665,21 +672,21 @@ num_ccw_freq
 #   )) |>
 #   # REMOVE TWO GROUPS!!!
 #   filter(race != "other" & race != "native")
-# 
-# 
+#
+#
 # # merge with full names for plotting
 # prev_df <- left_join(conditions, prev_race, by = "cond_abbr") |>
 #   left_join(prev_overall, by = "cond_abbr")
-# 
+#
 # # make conditions factors with levels sorted by by overall prevalence (for plotting)
 # prev_df$cond_name <- factor(prev_df$cond_name, levels = cond_name[order(prev_overall$prev_overall)])
-# 
+#
 # # get min and max prevalence values across regions
 # prev_min_max <- prev_df %>%
 #   group_by(cond_name) %>%
 #   summarize(min_prev = min(prev_race),
 #             max_prev = max(prev_race))
-# 
+#
 # # plot
 # prev_df |>
 #   ggplot(aes(x = prev_race, y = cond_name)) +
@@ -691,12 +698,12 @@ num_ccw_freq
 #        y = "",
 #        col = "") +
 #   theme_bw()
-# 
-# 
+#
+#
 # #----------------------------------------------------------- by race AND region
-# 
+#
 # top_10_cond <- arrange(prev_overall, desc(prev_overall))$cond_abbr[1:10]
-# 
+#
 # # How common is each chronic condition by race?
 # prev_region_race <- dt[, lapply(.SD, function(x) sum(x) / .N * 100),
 #                        by = .(census_region, race),
@@ -714,21 +721,21 @@ num_ccw_freq
 #   filter(race != "other" & race != "native") |>
 #   # keep only top 10 conditions
 #   filter(cond_abbr %in% top_10_cond)
-# 
+#
 # # merge with full names for plotting
 # prev_df <- left_join(conditions, prev_region_race, by = "cond_abbr") |>
 #   left_join(prev_overall, by = "cond_abbr") |>
 #   filter(!is.na(prev_region_race))
-# 
+#
 # # make conditions factors with levels sorted by by overall prevalence (for plotting)
 # prev_df$cond_name <- factor(prev_df$cond_name, levels = cond_name[order(prev_overall$prev_overall)])
-# 
+#
 # # get min and max prevalence values across regions
 # prev_min_max <- prev_df %>%
 #   group_by(cond_name, census_region) %>%
 #   summarize(min_prev = min(prev_region_race),
 #             max_prev = max(prev_region_race))
-# 
+#
 # # plot
 # prev_df |>
 #   ggplot(aes(x = prev_region_race, y = cond_name)) +
@@ -752,15 +759,15 @@ num_ccw_freq
 # # How common is each chronic condition?
 # cond_prev <- dt[, lapply(.SD, function(x) sum(x) / .N * 100),
 #                 .SDcols = cond_abbr] |> unlist()
-# 
+#
 # # among people who survived?
 # cond_prev_y0 <- dt[!(dead_12_16), lapply(.SD, function(x) sum(x) / .N * 100),
 #                    .SDcols = cond_abbr] |> unlist()
-# 
+#
 # # among people who died?
 # cond_prev_y1 <- dt[(dead_12_16), lapply(.SD, function(x) sum(x) / .N * 100),
 #                    .SDcols = cond_abbr] |> unlist()
-# 
+#
 # # among people who were censored?
 # cond_prev_cens <- dt.cens[, lapply(.SD, function(x) sum(x) / .N * 100),
 #                    .SDcols = cond_abbr] |> unlist()
@@ -775,7 +782,7 @@ num_ccw_freq
 # # get this into a df (with levels in prevalence order)
 # cond_prev_tab <- data.frame(cond = cond_name, prev = cond_prev)
 # cond_prev_tab$cond <- factor(cond_prev_tab$cond, levels = cond_name[order(cond_prev)])
-# 
+#
 # # plot
 # cond_prev_tab |>
 #   ggplot(aes(x = prev, y = cond)) +
@@ -789,11 +796,11 @@ num_ccw_freq
 # cond_prev_tab_big <- data.frame(cond = cond_name, prev_y0 = cond_prev_y0,
 #                                 prev_y1 = cond_prev_y1, prev_cens = cond_prev_cens)
 # cond_prev_tab_big$cond <- factor(cond_prev_tab_big$cond, levels = cond_name[order(cond_prev_y0)])
-# 
+#
 # # convert to long format
 # cond_prev_tab_big <- gather(cond_prev_tab_big, key = "data", value = "prevalence", -cond)
-# 
-# 
+#
+#
 # # plot
 # cond_prev_tab_big |>
 #   ggplot(aes(x = prevalence, y = cond, group = data)) +
@@ -806,99 +813,104 @@ num_ccw_freq
 #   theme_bw()
 
 
+# look at census variables across years
+dt[, .(mean(medianhousevalue)), by = year]
+dt[, .(mean(medhouseholdincome)), by = year]
+dt[, .(mean(mean_bmi)), by = year]
+
 
 # ---------- Table 1 ----------#
 
 
-###### RESTRICT TO 2010 FOR NOW ###### 
-
-dt <- dt[year == 2010,]
-
-# Note: rewriting values in dt to make this table
-
-# change table values
-dt[, sex := factor(sex, levels = c(1, 0), labels = c("Male", "Female"))]
-dt[, dual := factor(dual, levels = c(0, 1), labels = c("Ineligible", "Eligible"))]
-dt[, race := factor(race, levels = c(1:6),
-                    labels = c("Non-Hispanic White", "Black (or African-American)",
-                               "Other", "Asian/Pacific Islander",
-                               "Hispanic", "American Indian/Alaska Native"))]
-dt[, dead_lead := factor(dead_lead, levels = c(0, 1), 
-                          labels = c("Survived", "Died"))]
-dt[, census_region := factor(census_region)]
-
-### change table column names
-
-# individial-level
-setnames(dt, "age_grp", "Age group")
-setnames(dt, "race", "Race")
-setnames(dt, "sex", "Sex")
-setnames(dt, "dual", "Medicaid eligibility")
-
-# # ZIP-level
-setnames(dt, "pm25", "Mean annual PM2.5 (ug/m3)")
-# setnames(dt, "poverty", "% of 65+ population below poverty line")
-# setnames(dt, "popdensity", "Pop. density per square mile")
-# setnames(dt, "medianhousevalue", "Median value of owner occupied properties")
-# setnames(dt, "medhouseholdincome", "Median household income")
-# setnames(dt, "pct_owner_occ", "% of housing units occupied by owner")
-# setnames(dt, "education", "% of 65+ population not graduating from high school")
-# setnames(dt, "pct_blk", "% of 65+ population Black") # or full population?
-# setnames(dt, "pct_hispanic", "% of 65+ population Hispanic") # or full population?
-# setnames(dt, "summer_tmmx", "Summer average maximum temperature")
-# setnames(dt, "winter_tmmx", "Winter average maximum temperature")
-# setnames(dt, "summer_rmax", "Summer average maximum relative humidity")
-# setnames(dt, "winter_rmax", "Winter average maximum relative humidity")
-
-# # county-level
-# setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
-# setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
-
-# region
-setnames(dt, "census_region", "Census region")
-
-
-# get table 1
-tab1 <- table1(~Sex + `Age group` + Race + `Medicaid eligibility` + `Mean annual PM2.5 (ug/m3)` +
-         `Census region` #+
-       # `% of 65+ population below poverty line` + `Pop. density per square mile` + 
-       # `Median value of owner occupied properties` + `Median household income` + 
-       # `% of housing units occupied by owner` + `% of 65+ population not graduating from high school` + 
-       # `% of 65+ population Black` + `% of 65+ population Hispanic` + 
-       # `% of respondents in county who have ever smoked` + `Mean BMI of respondents in county` + 
-       # `Summer average maximum temperature` + `Winter average maximum temperature` +
-       # `Summer average maximum relative humidity` + `Winter average maximum relative humidity` 
-       | dead_lead, 
-       data = dt, big.mark = ",", render.continuous = c(.="Mean (SD)"))
-
-write_rds(tab1, file = "results/table1.rds")
+# ###### RESTRICT TO 2010 FOR NOW ######
+# 
+# dt <- dt[year == 2010,]
+# 
+# # Note: rewriting values in dt to make this table
+# 
+# # change table values
+# dt[, sex := factor(sex, levels = c(1, 0), labels = c("Male", "Female"))]
+# dt[, dual := factor(dual, levels = c(0, 1), labels = c("Ineligible", "Eligible"))]
+# dt[, race := factor(race, levels = c(1:6),
+#                     labels = c("Non-Hispanic White", "Black (or African-American)",
+#                                "Other", "Asian/Pacific Islander",
+#                                "Hispanic", "American Indian/Alaska Native"))]
+# dt[, died := factor(died, levels = c(0, 1),
+#                           labels = c("Survived", "Died"))]
+# dt[, census_region := factor(census_region)]
+# 
+# ### change table column names
+# 
+# # individial-level
+# setnames(dt, "age_grp", "Age group")
+# setnames(dt, "race", "Race")
+# setnames(dt, "sex", "Sex")
+# setnames(dt, "dual", "Medicaid eligibility")
+# 
+# # # ZIP-level
+# setnames(dt, "pm25", "Mean annual PM2.5 (ug/m3)")
+# # setnames(dt, "poverty", "% of 65+ population below poverty line")
+# # setnames(dt, "popdensity", "Pop. density per square mile")
+# # setnames(dt, "medianhousevalue", "Median value of owner occupied properties")
+# # setnames(dt, "medhouseholdincome", "Median household income")
+# # setnames(dt, "pct_owner_occ", "% of housing units occupied by owner")
+# # setnames(dt, "education", "% of 65+ population not graduating from high school")
+# # setnames(dt, "pct_blk", "% of 65+ population Black") # or full population?
+# # setnames(dt, "pct_hispanic", "% of 65+ population Hispanic") # or full population?
+# # setnames(dt, "summer_tmmx", "Summer average maximum temperature")
+# # setnames(dt, "winter_tmmx", "Winter average maximum temperature")
+# # setnames(dt, "summer_rmax", "Summer average maximum relative humidity")
+# # setnames(dt, "winter_rmax", "Winter average maximum relative humidity")
+# 
+# # # county-level
+# # setnames(dt, "smoke_rate", "% of respondents in county who have ever smoked")
+# # setnames(dt, "mean_bmi", "Mean BMI of respondents in county")
+# 
+# # region
+# setnames(dt, "census_region", "Census region")
+# 
+# 
+# # get table 1
+# tab1 <- table1(~Sex + `Age group` + Race + `Medicaid eligibility` + `Mean annual PM2.5 (ug/m3)` +
+#          `Census region` #+
+#        # `% of 65+ population below poverty line` + `Pop. density per square mile` +
+#        # `Median value of owner occupied properties` + `Median household income` +
+#        # `% of housing units occupied by owner` + `% of 65+ population not graduating from high school` +
+#        # `% of 65+ population Black` + `% of 65+ population Hispanic` +
+#        # `% of respondents in county who have ever smoked` + `Mean BMI of respondents in county` +
+#        # `Summer average maximum temperature` + `Winter average maximum temperature` +
+#        # `Summer average maximum relative humidity` + `Winter average maximum relative humidity`
+#        | died,
+#        data = dt, big.mark = ",", render.continuous = c(.="Mean (SD)"))
+# 
+# write_rds(tab1, file = "results/table1.rds")
 
 # # get table with just regions
-# table1(~`Census region` | dead_12_16, 
+# table1(~`Census region` | dead_12_16,
 #        data = dt, big.mark = ",", render.continuous = c(.="Mean (SD)"))
 
 
 # ##########
 # # now get a table with censored people (single column)
-# 
+#
 # # change table values
 # dt.cens[, sex := factor(sex, levels = c(1, 2), labels = c("Male", "Female"))]
 # dt.cens[, dual := factor(dual, levels = c(0, 1), labels = c("Ineligible", "Eligible"))]
-# dt.cens[, rti_race_cd := factor(race, levels = c(1:6), 
-#                            labels = c("Non-Hispanic White", "Black (or African-American)", 
-#                                       "Other", "Asian/Pacific Islander", 
+# dt.cens[, rti_race_cd := factor(race, levels = c(1:6),
+#                            labels = c("Non-Hispanic White", "Black (or African-American)",
+#                                       "Other", "Asian/Pacific Islander",
 #                                       "Hispanic", "American Indian/Alaska Native"))]
-# dt.cens[, dead_12_16 := factor(dead_12_16, levels = c(FALSE, TRUE), 
+# dt.cens[, dead_12_16 := factor(dead_12_16, levels = c(FALSE, TRUE),
 #                           labels = c("Survived", "Died"))]
-# 
+#
 # ### change table column names
-# 
+#
 # # individial-level
 # setnames(dt.cens, "age_grp", "Age")
 # setnames(dt.cens, "rti_race_cd", "Race")
 # setnames(dt.cens, "sex", "Sex")
 # setnames(dt.cens, "dual", "Medicaid eligibility")
-# 
+#
 # # ZIP-level
 # setnames(dt.cens, "pm25", "Mean annual PM2.5 (ug/m3)")
 # setnames(dt.cens, "poverty", "% of 65+ population below poverty line")
@@ -907,22 +919,43 @@ write_rds(tab1, file = "results/table1.rds")
 # setnames(dt.cens, "medhouseholdincome", "Median household income")
 # setnames(dt.cens, "pct_owner_occ", "% of housing units occupied by owner")
 # setnames(dt.cens, "education", "% of 65+ population not graduating from high school")
-# 
+#
 # # can't find appropriate page on GitHub
 # setnames(dt.cens, "max_temp", "max temp (check documentation)")
 # setnames(dt.cens, "min_humid", "min humid (check documentation)")
-# 
+#
 # # county-level
 # setnames(dt.cens, "smoke_rate", "% of respondents in county who have ever smoked")
 # setnames(dt.cens, "mean_bmi", "Mean BMI of respondents in county")
-# 
+#
 # # get table 1
-# table1(~Sex + Age + Race + `Medicaid eligibility` + `Mean annual PM2.5 (ug/m3)` + 
-#          `% of 65+ population below poverty line` + `Pop. density per square mile` + 
-#          `Median value of owner occupied properties` + `Median household income` + 
-#          `% of housing units occupied by owner` + `% of 65+ population not graduating from high school` + 
-#          `% of respondents in county who have ever smoked` + `Mean BMI of respondents in county` + 
-#          `max temp (check documentation)` + `min humid (check documentation)`, 
+# table1(~Sex + Age + Race + `Medicaid eligibility` + `Mean annual PM2.5 (ug/m3)` +
+#          `% of 65+ population below poverty line` + `Pop. density per square mile` +
+#          `Median value of owner occupied properties` + `Median household income` +
+#          `% of housing units occupied by owner` + `% of 65+ population not graduating from high school` +
+#          `% of respondents in county who have ever smoked` + `Mean BMI of respondents in county` +
+#          `max temp (check documentation)` + `min humid (check documentation)`,
 #        data = dt.cens, big.mark = ",", render.continuous = c(.="Mean (SD)"))
 
 dev.off()
+
+
+# first/last year FFS
+dt[year_follow == 1,] |>
+  ggplot() +
+  geom_bar(aes(first_year_ffs),
+           col = "white", fill = "skyblue2") +
+  labs(x = "First year FFS",
+       y = "Number of individuals") +
+  scale_y_continuous(labels = label_comma()) +
+  theme_light()
+dt[year_follow == 1,] |>
+  ggplot() +
+  geom_bar(aes(last_year_ffs),
+           col = "white", fill = "skyblue2") +
+  labs(x = "First year FFS",
+       y = "Number of individuals") +
+  scale_y_continuous(labels = label_comma()) +
+  theme_light()
+
+
