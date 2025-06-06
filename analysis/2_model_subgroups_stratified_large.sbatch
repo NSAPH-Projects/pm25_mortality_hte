@@ -15,4 +15,4 @@ stratify_by=$1
 # rename the slurm output file to include user-specified stratifying variable
 mv slurm-subpop-strat-${SLURM_ARRAY_TASK_ID}.out slurm-subpop-strat-${stratify_by}-${SLURM_ARRAY_TASK_ID}.out
 
-Rscript --vanilla analysis/4_model_subpops_stratified.R ${SLURM_ARRAY_TASK_ID} ${stratify_by}
+Rscript --vanilla analysis/2_model_subgroups_stratified.R ${SLURM_ARRAY_TASK_ID} ${stratify_by}

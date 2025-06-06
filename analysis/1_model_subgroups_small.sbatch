@@ -8,4 +8,4 @@
 
 module load R/4.2.2-fasrc01
 
-Rscript --vanilla analysis/3_model_subpops.R ${SLURM_ARRAY_TASK_ID}
+Rscript --vanilla analysis/1_model_subgroups.R ${SLURM_ARRAY_TASK_ID}
