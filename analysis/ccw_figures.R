@@ -13,10 +13,11 @@ library(magrittr)
 library(arrow)
 library(patchwork)
 library(xtable)
+library(gridExtra)
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
-# dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
+# dt <- readRDS("data/intermediate/rolling_cohort_10000.rds")
 
 # path to save figures
 fig_path <- "results/figures/"
@@ -35,8 +36,8 @@ cond_name <- c("Acquired Hypothyroidism", "Acute Myocardial Infarction",
                "Alzheimer's Disease", "ADRD or Senile Dementia",
                "Anemia",
                "Asthma", "Atrial Fibrillation", "Benign Prostatic Hyperplasia",
-               "Cancer, Female/Male Breast", "Cancer, Colorectal", "Cancer, Endometrial",
-               "Cancer, Lung", "Cancer, Prostate", "Cataract", "Chronic Kidney Disease",
+               "Breast Cancer", "Colorectal Cancer", "Endometrial Cancer",
+               "Lung Cancer", "Prostate Cancer", "Cataract", "Chronic Kidney Disease",
                "COPD and Bronchiectasis", "Depression", "Diabetes", "Glaucoma",
                "Heart Failure", "Hip/Pelvic Fracture", "Hyperlipidemia", "Hypertension",
                "Ischemic Heart Disease", "Osteoporosis",
@@ -47,10 +48,8 @@ conditions <- data.frame("cond_abbr" = cond_abbr, "cond_name" = cond_name)
 
 #################################
 
-# what % of observations are in each subgroup?
-prev_overall <- dt[#year == 2010
-                    , 
-                   lapply(.SD, function(x) sum(x) / .N * 100),
+# what % of people contribute to each subgroup?
+prev_overall <- dt[year == last_year_ffs - 1, lapply(.SD, function(x) sum(x) / .N * 100),
                    .SDcols = cond_abbr] |>
   gather(key = "cond_abbr", value = "prev_overall") |>
   left_join(conditions, by = "cond_abbr")
@@ -66,21 +65,19 @@ prev_overall$cond_name_prev <- factor(prev_overall$cond_name_prev,
                                  levels = prev_overall$cond_name_prev[order(prev_overall$prev_overall)])
 
 # plot
-p_left <- prev_overall |>
+pdf(paste0(fig_path, "ccw_prevalence.pdf"), width = 5, height = 5)
+prev_overall |>
   arrange(prev_overall) |>
   ggplot(aes(x = prev_overall, y = cond_name_prev)) +
   xlim(c(0, 40)) +
   geom_vline(xintercept = 0, col = "gray70") +
   geom_point(col = "orange2", size = 3) +
-  labs(x = "% of individuals",
+  labs(x = "Prevalence",
        y = "",
        col = "") +
   theme_minimal() +
   theme(plot.background = element_rect(fill = "white", color = NA),
         text = element_text(family = "Helvetica"))
-
-pdf(paste0(fig_path, "ccw_prevalence.pdf"), width = 5, height = 5)
-p_left
 dev.off()
 
 
@@ -93,10 +90,10 @@ dev.off()
 subgroup_n <- rbindlist(lapply(cond_abbr, function(col) {
   res <- dt[get(col) == 1, .(
     num_rows = .N,                   
-    num_indiv = uniqueN(qid),
+    num_indiv = uniqueN(bene_id),
     pm25_mean = mean(pm25) |> round(1),
     pm25_sd = sd(pm25) |> round(1),
-    death_rate = 100*mean(dead_lead)
+    death_rate = 100*mean(died_next_year)
   )]
   res[, cond_abbr := col]
 }))
@@ -109,23 +106,23 @@ subgroup_n <- subgroup_n %>%
 
 fullpop_row <- data.frame(cond_name = "Full population",
                           num_rows = dt[, .N],
-                          num_indiv = dt[, length(unique(qid))],
+                          num_indiv = dt[, length(unique(bene_id))],
                           pm25_mean = dt[, mean(pm25)] |> round(1),
                           pm25_sd = dt[, sd(pm25)] |> round(1),
-                          death_rate = dt[, 100*mean(dead_lead)])
+                          death_rate = dt[, 100*mean(died_next_year)])
 
 # new column that = 1 for rows with no previous hosp (all other indicators = 0)
 dt[, nohosp := as.integer(rowSums(.SD) == 0), .SDcols = cond_abbr]
 
 # new column for individuals who have nohosp == 1 for ALL observations
-dt[, all_nohosp := all(nohosp == 1), by = qid]
+dt[, all_nohosp := all(nohosp == 1), by = bene_id]
 
 nohosp_row <- data.frame(cond_name = "No subgroups",
                          num_rows = dt[nohosp == 1, .N],
-                         num_indiv = dt[all_nohosp == 1, length(unique(qid))],
+                         num_indiv = dt[all_nohosp == 1, length(unique(bene_id))],
                          pm25_mean = dt[nohosp == 1, mean(pm25)] |> round(1),
                          pm25_sd = dt[nohosp == 1, sd(pm25)] |> round(1),
-                         death_rate = dt[nohosp == 1, 100*mean(dead_lead)])
+                         death_rate = dt[nohosp == 1, 100*mean(died_next_year)])
 
 subgroup_n <- rbind(fullpop_row, nohosp_row, subgroup_n)
 
@@ -144,9 +141,7 @@ subgroup_n <- subgroup_n %>%
 # print in latex
 print(xtable(subgroup_n,
              type = "latex",
-             label = "tab:subgroup_n",
-             caption = "The number of observations (two-year rolling windows) and the number
-             of unique beneficiaries in each subgroup."),
+             label = "tab:subgroup_n"),
       file = "results/tables/subgroup_n.tex",
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -326,3 +321,26 @@ cor_df_long %>%
 dev.off()
 
 
+#################################
+
+# # get distribution of PM2.5 exposures across all 27 subgroups
+# 
+# ccw_pm25_list <- list()
+# 
+# for(i in seq_along(cond_abbr)){
+#   # get all PM2.5 values for each subgroup into a dataframe
+#   # note that each row can be in multiple subgroups
+#   one_cond_pm25 <- dt[get(cond_abbr[i]) == 1]$pm25
+#   ccw_pm25_list[[i]] <- data.frame(cond_abbr = rep(cond_abbr[i], length(one_cond_pm25)),
+#                               pm25 = one_cond_pm25)
+# }
+# # bind list elements into a data table for plotting
+# ccw_pm25 <- rbindlist(ccw_pm25_list)
+# 
+# # plot pm2.5 distributions
+# ccw_pm25 |>
+#   ggplot() +
+#   geom_density(aes(x = pm25)) + 
+#   facet_wrap(~cond_abbr)
+# 
+# 
