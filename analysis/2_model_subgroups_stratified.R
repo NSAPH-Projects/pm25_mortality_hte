@@ -11,12 +11,12 @@ library(stringr)
 library(dplyr)
 
 # in the command line, run something like:
-# sbatch analysis/4_model_subpops_stratified_small.sbatch race_white
+# sbatch analysis/4_model_subpops_stratified_small.sbatch census_region
 # to specify the variable to stratify on
 
 # Load data
 dt <- readRDS("data/intermediate/rolling_cohort.rds")
-# dt <- readRDS("data/intermediate/rolling_cohort_1000.rds")
+# dt <- readRDS("data/intermediate/rolling_cohort_10000.rds")
 
 
 #######################################################################
@@ -104,9 +104,8 @@ model_form <-
   pct_owner_occ + education + smoke_rate + mean_bmi +
   pct_blk + pct_hispanic + summer_tmmx + summer_rmax + winter_tmmx + winter_rmax"
 
-# remove the stratifying variable from the model
-# this is necessary for character/factor variables--will throw an error
-model_form <- str_remove(model_form, pattern = paste0(stratify_by, " \\+"))
+
+#--------- modify formula for certain cases
 
 # if stratifying by race, remove other race variable indicators
 if(stratify_by == "race"){
@@ -117,6 +116,17 @@ if(stratify_by == "race"){
   pct_owner_occ + education + smoke_rate + mean_bmi +
   pct_blk + pct_hispanic + summer_tmmx + summer_rmax + winter_tmmx + winter_rmax"
 }
+
+# if looking at endometrial or prostate cancer, remove sex from the model
+# running into errors because some subgroups (e.g. Asian) have no men with ICD codes for endometrial cancer
+# or no women with ICD codes for prostate cancer
+if(ccw_current %in% c("endometrialCancer_ever", "prostateCancer_ever")){
+  model_form <- str_remove(model_form, pattern = "sex \\+")
+}
+
+# remove the stratifying variable from the model
+# this is necessary for character/factor variables--will throw an error
+model_form <- str_remove(model_form, pattern = paste0(stratify_by, " \\+"))
 
 
 # fit the model, looping through levels of the stratifying variable
