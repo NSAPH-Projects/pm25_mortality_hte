@@ -24,7 +24,7 @@ dt <- readRDS("data/intermediate/rolling_cohort.rds")
 dt[ , `:=` (
   
   # use "--" to indicate where to indent later
-  sex = factor(sex, levels = c(1, 0), 
+  sex = factor(sex, levels = c(1, 2), 
                labels = c("--Male", "--Female")),
   dual = factor(dual, levels = c(0, 1), 
                 labels = c("--Ineligible", "--Eligible")),
@@ -71,7 +71,7 @@ dt[ , `:=` (
 
 # get table 1 for covariates where I'll use only the year of entry
 tab1_entry <- table1(~sex + age_grp + race + dual + census_region + urban,
-               data = dt[, .SD[1], by = qid], # year of entry only!
+               data = dt[, .SD[1], by = bene_id], 
                big.mark = ",", 
                render.continuous = c(.="Mean (SD)"))
 
@@ -113,7 +113,7 @@ tab1_all_years[1,1] <- "Number of observations"
 
 # also get the total number of deaths
 row_deaths <- data.frame(variable = "Number of deaths", 
-                         value = format(dt[,sum(dead_lead)], big.mark = ","))
+                         value = format(dt[,sum(died_next_year)], big.mark = ","))
 
 # bind rows (keeping overall counts at the top)
 tab1 <- rbind(tab1_entry[1,], tab1_all_years[1,], row_deaths,
@@ -218,13 +218,13 @@ print(xtable(tab1,
 
 # get info on age
 
-paste0("mean age in exposure window: ", dt[,mean(age)])
-paste0("SD age in exposure window: ", dt[,sd(age)])
+paste0("mean age in exposure window: ", dt[,mean(age_dob)])
+paste0("SD age in exposure window: ", dt[,sd(age_dob)])
 
 # restrict to first year in dt
-dt <- dt[, .SD[1], by = qid]
+dt <- dt[, .SD[1], by = bene_id]
 
-paste0("mean age at entry: ", dt[,mean(age)])
-paste0("SD age at entry: ", dt[,sd(age)])
+paste0("mean age at entry: ", dt[,mean(age_dob)])
+paste0("SD age at entry: ", dt[,sd(age_dob)])
 
 
