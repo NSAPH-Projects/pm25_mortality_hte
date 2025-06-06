@@ -7,4 +7,4 @@
 
 module load R/4.2.2-fasrc01
 
-Rscript --vanilla analysis/calculate_prevalence.R
+Rscript --vanilla analysis/3_calculate_prevalence.R
