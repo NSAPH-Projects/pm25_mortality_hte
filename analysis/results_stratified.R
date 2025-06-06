@@ -33,15 +33,17 @@ names(coeff) <- str_remove_all(file_names, pattern = "coeff_|.rds|_strat")
 
 #----- get effect of PM2.5 and 95% CI
 
+# ORs are for 10 ug/m3 increase in PM2.5
+
 get_pm25_effect <- function(x){
   
   # get row for PM2.5
   pm25_row <- x["pm25", ]
   
   # get OR and CIs
-  pm25_OR <- pm25_row["Estimate"] |> exp()
-  pm25_OR_low <- (pm25_row["Estimate"] - 1.96 * pm25_row["Std. Error"]) |> exp()
-  pm25_OR_high <- (pm25_row["Estimate"] + 1.96 * pm25_row["Std. Error"]) |> exp()
+  pm25_OR <- (pm25_row["Estimate"] * 10) |> exp()
+  pm25_OR_low <- ((pm25_row["Estimate"] * 10) - 1.96 * (pm25_row["Std. Error"] * 10)) |> exp()
+  pm25_OR_high <- ((pm25_row["Estimate"] * 10) + 1.96 * (pm25_row["Std. Error"] * 10)) |> exp()
   
   # get p-value
   pm25_pval <- pm25_row["Pr(>|z|)"]
@@ -112,7 +114,7 @@ cond_name_short <- c("Hypothyroidism", "AMI",
                      "Stroke/TIA", "None", 
                      "Full cohort")
 
-cond_name_long <- c("Acquired hypothyroidism", "Acute Myocardial Infarction",
+cond_name_long <- c("Acquired Hypothyroidism", "Acute Myocardial Infarction",
                     "Alzheimer's Disease", "ADRD or Senile Dementia", 
                     "Anemia", "Asthma", "Atrial Fibrillation", "Benign Prostatic Hyperplasia",
                     "Breast Cancer", "Colorectal Cancer", "Endometrial Cancer",
@@ -191,21 +193,24 @@ pm25_df <- pm25_df |>
                              levels = c(FALSE, TRUE)))
 
 # x-limits for plot
-xlims <- c(0.98, 1.03)
+xlims <- c(0.75, 1.25)
 
-# which CIs go off the page?
-pm25_df <- pm25_df %>%
-  mutate(
-    xmin_arrow = ifelse(low < xlims[1], xlims[1], NA),
-    xmax_arrow = ifelse(high > xlims[2], xlims[2], NA)
-  )
+# # which CIs go off the page?
+# pm25_df <- pm25_df %>%
+#   mutate(
+#     xmin_arrow = ifelse(low < xlims[1], TRUE, FALSE),
+#     xmax_arrow = ifelse(high > xlims[2], TRUE, FALSE)
+#   )
+# 
+# # clip CIs for plotting (so error bars stop at edge)
+# pm25_df$low_plot <- pmax(pm25_df$low, xlims[1])
+# pm25_df$high_plot <- pmin(pm25_df$high, xlims[2])
 
 # get elements of all plots
 gg_strat <- list(
   geom_point(position = position_dodge(width = 0.4)),
   geom_errorbar(aes(xmin = low, xmax = high),
                 width = 0, position = position_dodge(width = 0.4)),
-  
   # geom_text(aes(x = 0.99, y = cond_name, label = sig),
   #           position = position_dodge(width = 0.5),
   #           show.legend = FALSE),
@@ -243,14 +248,14 @@ plot_sex <- pm25_df |>
 
 #----- plot for census region
 
-plot_census_region <- pm25_df |>
-  filter(strat_var == "census_region") %>%
-  ggplot(aes(x = OR, y = cond_name_short, group = strat, col = strat)) +
-  scale_color_manual(values = c("Midwest" = "#414A90", 
-                                "Northeast" = "#69c0dd", 
-                                "South" = "#36a118",
-                                "West" = "#d8c94c")) +
-  gg_strat
+# plot_census_region <- pm25_df |>
+#   filter(strat_var == "census_region") %>%
+#   ggplot(aes(x = OR, y = cond_name_short, group = strat, col = strat)) +
+#   scale_color_manual(values = c("Midwest" = "#414A90", 
+#                                 "Northeast" = "#69c0dd", 
+#                                 "South" = "#36a118",
+#                                 "West" = "#d8c94c")) +
+#   gg_strat
 
 
 #----- plot for race (4 groups)
@@ -259,33 +264,6 @@ plot_race <- pm25_df |>
   filter(strat_var == "race",
          !strat %in% c("Native", "Other")) %>%
   ggplot(aes(x = OR, y = cond_name_short, group = strat, col = strat)) +
-  
-  # # Add arrows for xmin (left side truncation)
-  # geom_segment(
-  #   position = position_dodge(width = 0.4),
-  #   data = pm25_df %>% filter(!is.na(xmin_arrow) &
-  #                               strat_var == "race" &
-  #                               !strat %in% c("Native", "Other")),
-  #   aes(x = xmin_arrow, xend = xmin_arrow - 0.02, # Arrow points outward
-  #       y = cond_name_short, yend = cond_name_short,
-  #       col = strat),
-  #   arrow = arrow(length = unit(0.2, "cm")),
-  #   inherit.aes = FALSE
-  # ) +
-  # 
-  # # Add arrows for xmax (right side truncation)
-  # geom_segment(
-  #   position = position_dodge(width = 0.4),
-  #   data = pm25_df %>% filter(!is.na(xmax_arrow) &
-  #                               strat_var == "race" &
-  #                               !strat %in% c("Native", "Other")),
-  #   aes(x = xmax_arrow, xend = xmax_arrow + 0.02, # Arrow points outward
-  #       y = cond_name_short, yend = cond_name_short,
-  #       col = strat),
-  #   arrow = arrow(length = unit(0.2, "cm")),
-  #   inherit.aes = FALSE
-  # ) + 
-
   scale_color_manual(values = c(`White` = "#eec200",
                                 `Black` = "#0b6d5b",
                                 `Hispanic` = "#4dbdbf",
@@ -355,13 +333,14 @@ plot_urban <- pm25_df |>
 #   guides(color = guide_legend(reverse = TRUE))
 
 
-all_plots <- align_plots(plot_sex, plot_race, plot_dual, 
-                         plot_census_region, plot_urban,
+all_plots <- align_plots(plot_sex, plot_race, plot_dual, plot_urban,
                          align = "hv")
 
-pdf("results/figures/subpop_effects_stratified.pdf", height = 15, width = 11)
-plot_grid(all_plots[[1]], all_plots[[2]], all_plots[[3]], 
-          all_plots[[4]], all_plots[[5]],
+pdf("results/figures/subpop_effects_stratified.pdf", height = 13, width = 11)
+plot_grid(all_plots[[1]], 
+          all_plots[[2]], 
+          all_plots[[3]], 
+          all_plots[[4]],
           ncol = 2)
 dev.off()
 
@@ -372,9 +351,8 @@ dev.off()
 
 # do a table with headers that go across multiple columns
 # the column "names" can be 
-# 27 rows (+nohosp) for each disease
 
-n_digits <- 4
+n_digits <- 3
 
 # new column with proper formatting
 pm25_df <- pm25_df %>%
@@ -396,7 +374,7 @@ pm25_df <- pm25_df %>%
 pm25_df <- pm25_df %>%
   arrange(match(cond_name_short, rev(levels(pm25_df$cond_name_short))))
 
-# but move ful cohort to the top
+# but move full cohort to the top
 pm25_df$cond_abbr <- as.character(pm25_df$cond_abbr)
 pm25_df <-  rbind(pm25_df[pm25_df$cond_abbr == "fullpop",], 
       pm25_df[!pm25_df$cond_abbr == "fullpop",])
@@ -410,6 +388,16 @@ or_tab <- or_tab %>%
   pivot_wider(names_from = strat_var_x_strat,
               values_from = or_ci)
 
+# remove sex-stratified results for certain conditions
+
+sex_spec <- c("Prostate Cancer", "Benign Prostatic Hyperplasia", 
+              "Endometrial Cancer", "Breast Cancer")
+or_tab <- or_tab %>%
+  mutate(
+    sex_x_Male = if_else(cond_name_long %in% sex_spec, "---", sex_x_Male),
+    sex_x_Female = if_else(cond_name_long %in% sex_spec, "---", sex_x_Female)
+  )
+
 
 #----------- print tables in latex (needs to be in several tables)
 
@@ -417,8 +405,7 @@ or_tab <- or_tab %>%
 print(xtable(or_tab |> select(cond_name_long, 
                               names(or_tab)[str_detect(names(or_tab), "sex")]),
              type = "latex",
-             label = "tab:stratified_OR_sex",
-             caption = "sex results"),
+             label = "tab:stratified_OR_sex"),
       file = "results/tables/stratified_OR_sex.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -427,8 +414,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               names(or_tab)[str_detect(names(or_tab), "dual")]),
              type = "latex",
-             label = "tab:stratified_OR_dual",
-             caption = "dual results"),
+             label = "tab:stratified_OR_dual"),
       file = "results/tables/stratified_OR_dual.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -437,8 +423,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               race_x_White, race_x_Black),
              type = "latex",
-             label = "tab:stratified_OR_white_black",
-             caption = "race results"),
+             label = "tab:stratified_OR_white_black"),
       file = "results/tables/stratified_OR_white_black.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -447,8 +432,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               race_x_Asian, race_x_Hispanic),
              type = "latex",
-             label = "tab:stratified_OR_asian_hispanic",
-             caption = "race results"),
+             label = "tab:stratified_OR_asian_hispanic"),
       file = "results/tables/stratified_OR_asian_hispanic.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -457,8 +441,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               census_region_x_Northeast, census_region_x_Midwest),
              type = "latex",
-             label = "tab:stratified_OR_NE_MW",
-             caption = "census region results"),
+             label = "tab:stratified_OR_NE_MW"),
       file = "results/tables/stratified_OR_NE_MW.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -467,8 +450,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               census_region_x_South, census_region_x_West),
              type = "latex",
-             label = "tab:stratified_OR_S_W",
-             caption = "census region results"),
+             label = "tab:stratified_OR_S_W"),
       file = "results/tables/stratified_OR_S_W.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
@@ -477,8 +459,7 @@ print(xtable(or_tab |> select(cond_name_long,
 print(xtable(or_tab |> select(cond_name_long, 
                               names(or_tab)[str_detect(names(or_tab), "urban")]),
              type = "latex",
-             label = "tab:stratified_OR_urban",
-             caption = "urbanicity results"),
+             label = "tab:stratified_OR_urban"),
       file = "results/tables/stratified_OR_urban.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)

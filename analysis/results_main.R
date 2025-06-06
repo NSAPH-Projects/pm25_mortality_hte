@@ -29,15 +29,17 @@ names(coeff) <- str_remove_all(file_names, pattern = "coeff_|.rds")
 
 #----- get effect of PM2.5 and 95% CI
 
+# ORs are for 10 ug/m3 increase in PM2.5
+
 get_pm25_effect <- function(x){
   
   # get row for PM2.5
   pm25_row <- x["pm25", ]
-
+  
   # get OR and CIs
-  pm25_OR <- pm25_row["Estimate"] |> exp()
-  pm25_OR_low <- (pm25_row["Estimate"] - 1.96 * pm25_row["Std. Error"]) |> exp()
-  pm25_OR_high <- (pm25_row["Estimate"] + 1.96 * pm25_row["Std. Error"]) |> exp()
+  pm25_OR <- (pm25_row["Estimate"] * 10) |> exp()
+  pm25_OR_low <- ((pm25_row["Estimate"] * 10) - 1.96 * (pm25_row["Std. Error"] * 10)) |> exp()
+  pm25_OR_high <- ((pm25_row["Estimate"] * 10) + 1.96 * (pm25_row["Std. Error"] * 10)) |> exp()
   
   # get p-value
   pm25_pval <- pm25_row["Pr(>|z|)"]
@@ -52,21 +54,21 @@ pm25_df <- sapply(coeff, get_pm25_effect) |>
   t() |> 
   as.data.frame()
 
-# adjust p-values with Benjamini-Hochberg
-pm25_df <- pm25_df %>%
-  mutate(#pval_adj = p.adjust(pval, method = "BH")
-         pval_adj = p.adjust(pval, method = "BY"))
-
-# stars for significance
-pm25_df <- pm25_df %>% 
-  mutate(sig = ifelse(pval_adj < 0.001, "***", 
-                      ifelse(pval_adj < 0.01 & pval_adj >= 0.001, "**", 
-                             ifelse(pval_adj < 0.05 & pval_adj >= 0.01, "*", ""))))
-
-#---- prepare data for plotting
-
 # add column for condition
 pm25_df$cond_abbr <- rownames(pm25_df)
+
+# adjust condition-specific subgroup p-values with Benjamini–Yekutieli 
+# don't adjust for fullpop
+pm25_subs_df <- pm25_df %>%
+  filter(cond_abbr != "fullpop") |>
+  mutate(pval_adj = p.adjust(pval, method = "BY"))
+
+# join back with fullpop row
+pm25_df <- left_join(pm25_df, pm25_subs_df)
+
+
+
+#---- prepare data for plotting
 
 # get condition full names too
 cond_abbr <- c("hypoth", "ami", 
@@ -91,7 +93,7 @@ cond_name_short <- c("Hypothyroidism", "AMI",
                      "Stroke/TIA", "None", 
                      "Full cohort")
 
-cond_name_long <- c("Acquired hypothyroidism", "Acute Myocardial Infarction",
+cond_name_long <- c("Acquired Hypothyroidism", "Acute Myocardial Infarction",
                "Alzheimer's Disease", "ADRD or Senile Dementia", 
                "Anemia", "Asthma", "Atrial Fibrillation", "Benign Prostatic Hyperplasia",
                "Breast Cancer", "Colorectal Cancer", "Endometrial Cancer",
@@ -155,9 +157,9 @@ pm25_df |>
   geom_errorbar(aes(xmin = low, xmax = high), width = 0) +
   geom_vline(xintercept = 1, lty = 2, col = "gray50") +
   #geom_vline(xintercept = pm25_df$OR[pm25_df$cond_abbr == "fullpop"], lty = 2, col = "gray50") +
-  labs(x = expression("OR (95% CI) for mortality with 1 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
+  labs(x = expression("OR (95% CI) for mortality with 10 " * mu * "g/" * m^3 * " increase in " * PM[2.5]), 
        y = "") +
-  xlim(c(0.998, 1.015)) +
+  #xlim(c(0.998, 1.015)) +
   #scale_color_manual(values = c(`TRUE` = "black", `FALSE` = "black")) +
   facet_grid(special ~ ., scales = "free_y", space = "free") +
   # geom_text(aes(x = 0.999, y = cond_name_prev, label = sig)) +
@@ -175,7 +177,7 @@ dev.off()
 
 # table with the same results
 
-n_digits <- 4
+n_digits <- 3
 
 pm25_df <- pm25_df %>%
   mutate(or_ci = paste0(
@@ -231,14 +233,23 @@ pm25_df <- pm25_df %>%
 main_res_df <- pm25_df %>%
   filter(cond_abbr != "nohosp") %>%
   arrange(desc(OR)) %>%
-  #arrange(OR) %>%
+  arrange(desc(cond_abbr == "fullpop")) %>%
   select(cond_name_long, or_ci, pval, pval_adj) %>%
-  mutate(pval = ifelse(pval < 0.0001,
-                       "\\textless 0.0001",
-                       format(round(pval, digits = 4), digits = 4)),
-         pval_adj = ifelse(pval_adj < 0.0001,
-                       "\\textless 0.0001",
-                       format(round(pval_adj, digits = 4), digits = 4))) %>%
+  mutate(pval = ifelse(pval < 0.001,
+                       "\\textless 0.001",
+                       format(round(pval, digits = n_digits), nsmall = n_digits)),
+         pval_adj = ifelse(pval_adj < 0.001,
+                       "\\textless 0.001",
+                       format(round(pval_adj, digits = n_digits), nsmall = n_digits))) %>%
+  mutate(pval = ifelse(pval > 0.999,
+                       "\\textgreater 0.999",
+                       pval),
+         pval_adj = ifelse(pval_adj > 0.999,
+                           "\\textgreater 0.999",
+                           pval)) %>%
+  mutate(pval_adj = ifelse(is.na(pval_adj), 
+                           "---", 
+                           pval_adj)) %>%
   rename(Subgroup = cond_name_long,
          `Odds ratio (95\\% CI)` = or_ci,
          `P-value` = pval,
@@ -247,11 +258,8 @@ main_res_df <- pm25_df %>%
 # print in latex
 print(xtable(main_res_df,
              type = "latex",
-             label = "tab:subpop_effects",
-             caption = "Odds ratios (95\\% confidence intervals), p-values, and Benjamini–Yekutieli
-             adjusted p-values for mortality associated with a 1 \\(\\mu g/m^3\\) increase in 
-             PM\\(_{2.5}\\) for individuals in each subgroup."),
-      file = "results/tables/subpop_effects.tex", 
+             label = "tab:main_OR"),
+      file = "results/tables/main_OR.tex", 
       sanitize.text.function = identity,
       include.rownames = FALSE)
 
