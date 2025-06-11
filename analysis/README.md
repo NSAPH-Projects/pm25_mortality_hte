@@ -1,4 +1,4 @@
-Run these scripts first:
+**Run these scripts first:**
 
 [1_model_subgroups.R](1_model_subgroups.R)
 * Fit discrete-time logistic regression models for the full cohort and for each condition-specific subgroup
@@ -11,7 +11,7 @@ Run these scripts first:
 [3_calculate_prevalence.R](3_calculate_prevalence.R)
 * Calculate prevelance of each condition (used in plots later)
 
-Then run the following scripts as needed, in any order:
+**Then run the following scripts as needed, in any order:**
 
 [ccw_figures.R](ccw_figures.R)
 * Visualize medical history
