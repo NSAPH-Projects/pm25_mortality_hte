@@ -25,7 +25,7 @@ Then run the following scripts as needed, in any order:
 [results_main.R](results_main.R)
 * Get results (figure and table) from main models (full cohort and condition-specific subgroups)
 
-[results_stratified.R](results_stratified)
+[results_stratified.R](results_stratified.R)
 * Get results (figures and tables) from stratified models (condition-specific subgroups stratified by sex, race/ethnicity, Medicaid eligibility, and urbanicity
 
 [table1.R](table1.R)
