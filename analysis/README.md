@@ -9,4 +9,7 @@
 [3_calculate_prevalence.R](3_calculate_prevalence.R)
 * Calculate prevelance of each condition (used in plots later)
 
-[4]()
+[ccw_figures.R](ccw_figures.R)
+* Visualize medical history
+
+[explore_data.R](
