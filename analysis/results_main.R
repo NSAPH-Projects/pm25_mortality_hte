@@ -256,7 +256,7 @@ main_res_df <- pm25_df %>%
          `Adjusted p-value` = pval_adj)
 
 # print in latex
-print(xtable(main_res_df,
+print(xtable(main_res_df[,1:2],
              type = "latex",
              label = "tab:main_OR"),
       file = "results/tables/main_OR.tex", 
